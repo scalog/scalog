@@ -40,5 +40,8 @@ func Start() {
 	server := NewOrderServer()
 	go server.Start()
 
-	grpcServer.Serve(lis)
+	err = grpcServer.Serve(lis)
+	if err != nil {
+		log.Fatalf("Failed to server grpc: %v", err)
+	}
 }
