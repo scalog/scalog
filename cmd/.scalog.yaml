@@ -1,0 +1,5 @@
+order-replication-factor: 1
+order-batching-interval: 1000ms
+
+data-replication-factor: 2
+data-batching-interval: 1000ms
