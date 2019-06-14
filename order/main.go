@@ -25,7 +25,7 @@ func Start() {
 
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
-		log.Fatalf("Failed to listen to port %v:", port, err)
+		log.Fatalf("Failed to listen to port %v: %v", port, err)
 	}
 	grpcServer := grpc.NewServer(
 		grpc.KeepaliveParams(keepalive.ServerParameters{
