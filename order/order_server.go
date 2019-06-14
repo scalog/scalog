@@ -90,7 +90,7 @@ func (s *OrderServer) processReport() {
 					}
 					ccut[shard] = min
 				}
-				ce := &orderpb.CommittedEntry{0, 0, &orderpb.CommittedCut{0, ccut}, nil}
+				ce := &orderpb.CommittedEntry{Seq: 0, ViewID: 0, CommittedCut: &orderpb.CommittedCut{StartGSN: 0, Cut: ccut}, FinalizeShards: nil}
 				s.proposeC <- ce
 			}
 		}
