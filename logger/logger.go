@@ -8,7 +8,7 @@ import (
 var logger *log.Logger
 
 func init() {
-	logger = log.New(os.Stdout, "[scalog]", log.Ldate|log.Lmicroseconds)
+	logger = log.New(os.Stdout, "[scalog] ", log.Ldate|log.Lmicroseconds)
 }
 
 func Printf(format string, v ...interface{}) {
