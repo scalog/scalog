@@ -8,7 +8,7 @@ import (
 
 func Start() {
 	numReplica := viper.GetInt("order-replication-factor")
-	batchingInterval := viper.GetInt("order-batching-interval")
+	batchingInterval := viper.GetString("order-batching-interval")
 	log.Printf("%v: %v", "order-replication-factor", numReplica)
 	log.Printf("%v: %v", "order-batching-interval", batchingInterval)
 }
