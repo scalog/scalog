@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package orderpb;
+
+service Order {
+	rpc Report(stream LocalCuts) returns (stream CommittedEntry) {}
+	rpc Forward(stream LocalCuts) returns (Empty) {}
+	rpc Finalize(FinalizeEntry) returns (Empty) {}
+}
+
+message LocalCut {
+	int32 shardID = 1;
+	int32 localReplicaID = 2; // 0...(numReplicas-1)
+	repeated int32 cut = 3; // Array of len numReplicas
+}
+
+message LocalCuts {
+	repeated LocalCut cuts = 1;
+}
+
+message CommittedCut {
+	int32 startGSN = 1;
+	// from globalReplicaID to each cut entry
+	// globalReplicaID = shardID * numReplicas + localReplicaID
+	map<int32, int32> cut = 2;
+}
+
+message CommittedEntry {
+	int64 seq = 1;
+	int32 viewID = 2;
+	CommittedCut committedCut = 3;
+	FinalizeEntry finalizeShards = 4;
+}
+
+message FinalizeEntry {
+	int32 limit = 1;
+	repeated int32 shardIDs = 2;
+}
+
+message Empty {}

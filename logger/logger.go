@@ -23,7 +23,7 @@ func Debugf(format string, v ...interface{}) {
 	logger.Printf(format, v...)
 }
 
-func InfoF(format string, v ...interface{}) {
+func Infof(format string, v ...interface{}) {
 	logger.Printf(format, v...)
 }
 
