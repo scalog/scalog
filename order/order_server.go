@@ -12,6 +12,7 @@ type OrderServer struct {
 	index            int32
 	numReplica       int32
 	dataNumReplica   int32
+	clientID         int32
 	batchingInterval time.Duration
 	isLeader         bool
 	shards           map[int32]bool // true for live shards, false for finalized ones
@@ -19,7 +20,7 @@ type OrderServer struct {
 	proposeC         chan *orderpb.CommittedEntry
 	commitC          chan *orderpb.CommittedEntry
 	finalizeC        chan *orderpb.FinalizeEntry
-	subC             []chan *orderpb.CommittedEntry
+	subC             map[int32]chan *orderpb.CommittedEntry
 	subCMu           sync.RWMutex
 }
 
@@ -36,7 +37,7 @@ func NewOrderServer(index, numReplica, dataNumReplica int32, batchingInterval ti
 	s.proposeC = make(chan *orderpb.CommittedEntry)
 	s.commitC = make(chan *orderpb.CommittedEntry)
 	s.finalizeC = make(chan *orderpb.FinalizeEntry)
-	s.subC = make([]chan *orderpb.CommittedEntry, 0)
+	s.subC = make(map[int32]chan *orderpb.CommittedEntry)
 	return s
 }
 
@@ -95,7 +96,18 @@ func (s *OrderServer) processReport() {
 			if s.isLeader { // store local cuts
 				for _, lc := range e.Cuts {
 					id := lc.ShardID*s.dataNumReplica + lc.LocalReplicaID
-					lcs[id] = lc
+					valid := true
+					// check if the received cut is up-to-date
+					if _, ok := lcs[id]; ok {
+						for i := int32(0); i < s.dataNumReplica; i++ {
+							if lc.Cut[i] < lcs[id].Cut[i] {
+								valid = false
+							}
+						}
+					}
+					if valid {
+						lcs[id] = lc
+					}
 				}
 			} else {
 				// TODO: forward to the leader

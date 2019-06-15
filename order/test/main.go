@@ -35,20 +35,21 @@ func main() {
 		panic(err)
 	}
 
-	var lcs *orderpb.LocalCuts
-	lcs = genLCS(0, 0, 18, 10)
-	reportClient.Send(lcs)
-	lcs = genLCS(0, 1, 11, 17)
-	reportClient.Send(lcs)
-	lcs = genLCS(1, 0, 100, 1024)
-	reportClient.Send(lcs)
-	lcs = genLCS(1, 1, 98, 2048)
-	reportClient.Send(lcs)
+	for i := int64(0); i < 3; i++ {
+		var lcs *orderpb.LocalCuts
+		lcs = genLCS(0, 0, 18+i, 10+i)
+		reportClient.Send(lcs)
+		lcs = genLCS(0, 1, 11+i, 17+i)
+		reportClient.Send(lcs)
+		lcs = genLCS(1, 0, 100+i, 1024+i)
+		reportClient.Send(lcs)
+		lcs = genLCS(1, 1, 98+i, 2048+i)
+		reportClient.Send(lcs)
 
-	cut, err := reportClient.Recv()
-	if err != nil {
-		panic(err)
+		cut, err := reportClient.Recv()
+		if err != nil {
+			panic(err)
+		}
+		println(cut.String())
 	}
-
-	println(cut.String())
 }

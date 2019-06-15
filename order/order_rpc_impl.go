@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	log "github.com/scalog/scalogger/logger"
 	"github.com/scalog/scalogger/order/orderpb"
 )
 
@@ -31,14 +32,26 @@ func (server *OrderServer) Report(stream orderpb.Order_ReportServer) error {
 func (server *OrderServer) respondToDataReplica(done chan struct{}, stream orderpb.Order_ReportServer) {
 	respC := make(chan *orderpb.CommittedEntry)
 	server.subCMu.Lock()
-	server.subC = append(server.subC, respC)
+	cid := server.clientID
+	server.clientID++
+	server.subC[cid] = respC
 	server.subCMu.Unlock()
 	for {
 		select {
 		case <-done:
+			server.subCMu.Lock()
+			delete(server.subC, cid)
+			server.subCMu.Unlock()
+			log.Infof("Client %v is closed", cid)
+			close(respC)
 			return
 		case resp := <-respC:
 			if err := stream.Send(resp); err != nil {
+				server.subCMu.Lock()
+				delete(server.subC, cid)
+				server.subCMu.Unlock()
+				log.Infof("Client %v is closed", cid)
+				close(respC)
 				close(done)
 				return
 			}
