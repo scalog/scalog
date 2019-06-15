@@ -6,11 +6,10 @@ import (
 	"time"
 
 	log "github.com/scalog/scalogger/logger"
+	"github.com/scalog/scalogger/order/orderpb"
 
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -37,12 +36,9 @@ func Start() {
 		}),
 	)
 
-	healthServer := health.NewServer()
-	healthServer.Resume()
-	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
-
 	server := NewOrderServer(index, numReplica, dataNumReplica, batchingInterval)
-	go server.Start()
+	orderpb.RegisterOrderServer(grpcServer, server)
+	server.Start()
 
 	err = grpcServer.Serve(lis)
 	if err != nil {

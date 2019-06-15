@@ -44,7 +44,6 @@ func (s *OrderServer) Start() {
 	go s.processReport()
 	go s.runReplication()
 	go s.processCommit()
-
 }
 
 // runReplication runs Raft to replicate proposed messages and receive
@@ -56,6 +55,34 @@ func (s *OrderServer) runReplication() {
 			s.commitC <- e
 		}
 	}
+}
+
+func (s *OrderServer) computeCommittedCut(lcs map[int32]*orderpb.LocalCut) map[int32]int64 {
+	// add new live shards
+	for shard := range lcs {
+		if _, ok := s.shards[shard]; !ok {
+			s.shards[shard] = true
+		}
+	}
+	ccut := make(map[int32]int64)
+	for shard, status := range s.shards {
+		// check if the shard is finialized
+		if !status {
+			// clean finalized shards from lcs
+			delete(lcs, shard)
+			continue
+		}
+		localReplicaID := shard % s.dataNumReplica
+		begin := shard - localReplicaID
+		min := int64(math.MaxInt64)
+		for i := int32(0); i < s.dataNumReplica; i++ {
+			if min > lcs[begin+i].Cut[localReplicaID] {
+				min = lcs[begin+i].Cut[localReplicaID]
+			}
+		}
+		ccut[shard] = min
+	}
+	return ccut
 }
 
 // proposeCommit broadcasts entries in commitC to all subCs.
@@ -76,20 +103,7 @@ func (s *OrderServer) processReport() {
 		case <-ticker.C:
 			// TODO: check to make sure the key in lcs exist
 			if s.isLeader { // compute committedCut
-				ccut := make(map[int32]int64)
-				for shard, status := range s.shards {
-					if !status {
-						continue
-					}
-					begin := shard - shard%s.numReplica
-					min := int64(math.MaxInt64)
-					for i := int32(0); i < s.numReplica; i++ {
-						if min > lcs[begin+i].Cut[i] {
-							min = lcs[begin+i].Cut[i]
-						}
-					}
-					ccut[shard] = min
-				}
+				ccut := s.computeCommittedCut(lcs)
 				ce := &orderpb.CommittedEntry{Seq: 0, ViewID: 0, CommittedCut: &orderpb.CommittedCut{StartGSN: 0, Cut: ccut}, FinalizeShards: nil}
 				s.proposeC <- ce
 			}
