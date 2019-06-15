@@ -10,6 +10,8 @@ import (
 
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -35,6 +37,10 @@ func Start() {
 			MaxConnectionIdle: 5 * time.Minute,
 		}),
 	)
+
+	healthServer := health.NewServer()
+	healthServer.Resume()
+	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 
 	server := NewOrderServer(index, numReplica, dataNumReplica, batchingInterval)
 	orderpb.RegisterOrderServer(grpcServer, server)
