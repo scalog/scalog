@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package datapb;
+
+service Data {
+	// clients set shardID to -1
+	rpc Append(stream Record) returns (stream Ack) {}
+	// replicas set proper shardID and localReplicaID
+	rpc Replicate(stream Record) returns (Empty) {}
+	// the servers don't need to know the sources of the following requests
+	rpc Subscribe(GlobalSN) returns (stream Record) {}
+	rpc Trim(GlobalSN) returns (Ack) {}
+	rpc Read(GlobalSN) returns (Record) {}
+}
+
+message Record {
+	int32 clientID = 1;
+	int32 clientSN = 2; // client sequence number
+	int32 globalSN = 3; // global sequence number
+	int32 shardID = 4;
+	int32 localReplicaID = 5;
+	string record = 6;
+}
+
+message Ack {
+	int32 clientID = 1;
+	int32 clientSN = 2; // client sequence number
+	int32 globalSN = 3; // global sequence number
+	int32 shardID = 4;
+	int32 localReplicaID = 5;
+	bool succeeded = 6;
+}
+
+message GlobalSN {
+	int64 gsn = 1;
+}
+
+message Empty {}
