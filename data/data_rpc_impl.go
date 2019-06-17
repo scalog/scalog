@@ -85,7 +85,7 @@ func (server *DataServer) Trim(ctx context.Context, gsn *datapb.GlobalSN) (*data
 }
 
 func (server *DataServer) Read(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Record, error) {
-	r, err := server.storage.ReadGSN(gsn.Gsn)
+	r, err := server.storage.Read(gsn.Gsn)
 	if err != nil {
 		return nil, err
 	}

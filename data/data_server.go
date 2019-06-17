@@ -49,8 +49,8 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	server.appendC = make(chan *datapb.Record)
 	server.replicateC = make(chan *datapb.Record)
 	server.replicateSendC = make([]chan *datapb.Record, numReplica)
-	path := fmt.Sprintf("storage-%v-%v", shardID, replicaID)
-	storage, err := storage.NewStorage(path) // TODO configure path
+	path := fmt.Sprintf("storage-%v-%v", shardID, replicaID) // TODO configure path
+	storage, err := storage.NewStorage(path, replicaID, numReplica)
 	if err != nil {
 		log.Fatalf("Create storage failed: %v", err)
 	}
