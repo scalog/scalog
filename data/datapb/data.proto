@@ -19,7 +19,8 @@ message Record {
 	int32 globalSN = 3; // global sequence number
 	int32 shardID = 4;
 	int32 localReplicaID = 5;
-	string record = 6;
+	int32 viewID = 6;
+	string record = 7;
 }
 
 message Ack {
@@ -28,7 +29,8 @@ message Ack {
 	int32 globalSN = 3; // global sequence number
 	int32 shardID = 4;
 	int32 localReplicaID = 5;
-	bool succeeded = 6;
+	int32 viewID = 6;
+	bool succeeded = 7;
 }
 
 message GlobalSN {
