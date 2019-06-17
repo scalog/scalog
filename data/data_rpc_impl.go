@@ -84,6 +84,21 @@ func (server *DataServer) Trim(ctx context.Context, gsn *datapb.GlobalSN) (*data
 	return &datapb.Empty{}, nil
 }
 
+func (server *DataServer) Read(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Record, error) {
+	r, rid, err := server.storage.Read(gsn.Gsn)
+	if err != nil {
+		return nil, err
+	}
+	record := &datapb.Record{
+		GlobalSN:       gsn.Gsn,
+		ShardID:        server.shardID,
+		LocalReplicaID: rid,
+		ViewID:         server.viewID,
+		Record:         r,
+	}
+	return record, err
+}
+
 func (server *DataServer) Subscribe(gsn *datapb.GlobalSN, stream datapb.Data_SubscribeServer) error {
 	subC := make(chan *datapb.Record)
 	server.subCMu.Lock()

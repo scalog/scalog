@@ -18,6 +18,7 @@ type DataServer struct {
 	globalReplicaID  int32
 	clientID         int32
 	numReplica       int32
+	viewID           int32
 	peers            []string
 	peerConns        []*grpc.ClientConn
 	peerClients      []*datapb.Data_ReplicateClient
@@ -38,6 +39,7 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		shardID:          shardID,
 		globalReplicaID:  shardID*numReplica + replicaID,
 		clientID:         0,
+		viewID:           0,
 		batchingInterval: batchingInterval,
 	}
 	server.ackC = make(map[int32]chan *datapb.Ack)
