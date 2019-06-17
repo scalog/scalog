@@ -2,12 +2,14 @@ package data
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/scalog/scalogger/data/datapb"
 	log "github.com/scalog/scalogger/logger"
+	"github.com/scalog/scalogger/storage"
 
 	"google.golang.org/grpc"
 )
@@ -30,7 +32,7 @@ type DataServer struct {
 	ackCMu           sync.RWMutex
 	subC             map[int32]chan *datapb.Record
 	subCMu           sync.RWMutex
-	storage          *Storage
+	storage          *storage.Storage
 }
 
 func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string) *DataServer {
@@ -47,7 +49,12 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	server.appendC = make(chan *datapb.Record)
 	server.replicateC = make(chan *datapb.Record)
 	server.replicateSendC = make([]chan *datapb.Record, numReplica)
-	server.storage = NewStorage()
+	path := fmt.Sprintf("storage-%v-%v", shardID, replicaID)
+	storage, err := storage.NewStorage(path) // TODO configure path
+	if err != nil {
+		log.Fatalf("Create storage failed: %v", err)
+	}
+	server.storage = storage
 	for i := int32(0); i < numReplica; i++ {
 		server.replicateSendC[i] = make(chan *datapb.Record)
 	}
@@ -118,12 +125,13 @@ func (server *DataServer) processAppend() {
 	for {
 		select {
 		case record := <-server.appendC:
+			record.LocalReplicaID = server.localReplicaID
 			for _, c := range server.replicateSendC {
 				c <- record
-				err := server.storage.Write(record)
-				if err != nil {
-					log.Fatalf("Write to storage failed: %v", err)
-				}
+			}
+			_, err := server.storage.Write(record.Record)
+			if err != nil {
+				log.Fatalf("Write to storage failed: %v", err)
 			}
 		}
 	}
@@ -133,7 +141,8 @@ func (server *DataServer) processReplicate() {
 	for {
 		select {
 		case record := <-server.appendC:
-			err := server.storage.Write(record)
+			// TODO write to the proper partition
+			_, err := server.storage.Write(record.Record)
 			if err != nil {
 				log.Fatalf("Write to storage failed: %v", err)
 			}
