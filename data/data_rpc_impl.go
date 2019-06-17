@@ -9,8 +9,8 @@ import (
 )
 
 func (server *DataServer) Append(stream datapb.Data_AppendServer) error {
+	initialized := false
 	done := make(chan struct{})
-	go server.respondToClient(done, stream)
 	for {
 		select {
 		case <-done:
@@ -24,16 +24,20 @@ func (server *DataServer) Append(stream datapb.Data_AppendServer) error {
 				}
 				return err
 			}
+			if !initialized {
+				cid := record.ClientID
+				go server.respondToClient(cid, done, stream)
+				initialized = true
+			}
 			server.appendC <- record
+
 		}
 	}
 }
 
-func (server *DataServer) respondToClient(done chan struct{}, stream datapb.Data_AppendServer) {
+func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream datapb.Data_AppendServer) {
 	ackC := make(chan *datapb.Ack)
 	server.ackCMu.Lock()
-	cid := server.clientID
-	server.clientID++
 	server.ackC[cid] = ackC
 	server.ackCMu.Unlock()
 	for {
@@ -59,6 +63,46 @@ func (server *DataServer) respondToClient(done chan struct{}, stream datapb.Data
 	}
 }
 
-func (server *DataServer) Trim(ctx context.Context, req *datapb.GlobalSN) (*datapb.Empty, error) {
+func (server *DataServer) Replicate(stream datapb.Data_AppendServer) error {
+	for {
+		select {
+		default:
+			record, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					return nil
+				}
+				return err
+			}
+			server.replicateC <- record
+		}
+	}
+}
+
+// TODO implement the trim operation
+func (server *DataServer) Trim(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Empty, error) {
 	return &datapb.Empty{}, nil
+}
+
+func (server *DataServer) Subscribe(gsn *datapb.GlobalSN, stream datapb.Data_SubscribeServer) error {
+	subC := make(chan *datapb.Record)
+	server.subCMu.Lock()
+	cid := server.clientID
+	server.clientID++
+	server.subC[cid] = subC
+	server.subCMu.Unlock()
+	for {
+		select {
+		case sub := <-subC:
+			if err := stream.Send(sub); err != nil {
+				server.subCMu.Lock()
+				delete(server.subC, cid)
+				server.subCMu.Unlock()
+				log.Infof("Client %v is closed", cid)
+				close(subC)
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -23,9 +23,13 @@ type DataServer struct {
 	peerClients      []*datapb.Data_ReplicateClient
 	batchingInterval time.Duration
 	appendC          chan *datapb.Record
-	replicateC       []chan *datapb.Record
+	replicateC       chan *datapb.Record
+	replicateSendC   []chan *datapb.Record
 	ackC             map[int32]chan *datapb.Ack
 	ackCMu           sync.RWMutex
+	subC             map[int32]chan *datapb.Record
+	subCMu           sync.RWMutex
+	storage          *Storage
 }
 
 func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string) *DataServer {
@@ -37,10 +41,13 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		batchingInterval: batchingInterval,
 	}
 	server.ackC = make(map[int32]chan *datapb.Ack)
+	server.subC = make(map[int32]chan *datapb.Record)
 	server.appendC = make(chan *datapb.Record)
-	server.replicateC = make([]chan *datapb.Record, numReplica)
+	server.replicateC = make(chan *datapb.Record)
+	server.replicateSendC = make([]chan *datapb.Record, numReplica)
+	server.storage = NewStorage()
 	for i := int32(0); i < numReplica; i++ {
-		server.replicateC[i] = make(chan *datapb.Record)
+		server.replicateSendC[i] = make(chan *datapb.Record)
 	}
 	server.UpdatePeers(peers)
 	return server
@@ -77,21 +84,22 @@ func (server *DataServer) UpdatePeers(peers string) {
 		}
 		server.peerConns[i] = conn
 		dataClient := datapb.NewDataClient(conn)
-		replicateClient, err := dataClient.Replicate(context.Background())
+		replicateSendClient, err := dataClient.Replicate(context.Background())
 		if err != nil {
 			log.Fatalf("Create replicate client to %v failed: %v", server.peers[i], err)
 		}
-		server.peerClients[i] = &replicateClient
+		server.peerClients[i] = &replicateSendClient
 		go server.replicateRecords(i)
 	}
 }
 
 func (server *DataServer) Start() {
 	go server.processAppend()
+	go server.processReplicate()
 }
 
 func (server *DataServer) replicateRecords(i int32) {
-	ch := server.replicateC[i]
+	ch := server.replicateSendC[i]
 	client := *server.peerClients[i]
 	for {
 		select {
@@ -108,8 +116,24 @@ func (server *DataServer) processAppend() {
 	for {
 		select {
 		case record := <-server.appendC:
-			for _, c := range server.replicateC {
+			for _, c := range server.replicateSendC {
 				c <- record
+				err := server.storage.Write(record)
+				if err != nil {
+					log.Fatalf("Write to storage failed: %v", err)
+				}
+			}
+		}
+	}
+}
+
+func (server *DataServer) processReplicate() {
+	for {
+		select {
+		case record := <-server.appendC:
+			err := server.storage.Write(record)
+			if err != nil {
+				log.Fatalf("Write to storage failed: %v", err)
 			}
 		}
 	}
