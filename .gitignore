@@ -13,3 +13,11 @@
 
 # The binary
 scalogger
+
+# Log files and indexes
+*.log
+*.gsn
+*.lsn
+
+# Temperary files
+tmp
