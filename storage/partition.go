@@ -8,7 +8,7 @@ type Partition struct {
 	segLen        int32
 }
 
-func NewPartition() (*Partition, error) {
+func NewPartition(segLen int32) (*Partition, error) {
 	var err error
 	p := &Partition{nextLSN: 0, activeBaseLSN: 0}
 	p.segments = make([]*Segment, 0)
@@ -16,7 +16,7 @@ func NewPartition() (*Partition, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.segLen = 1000 // TODO: make it configurable
+	p.segLen = segLen
 	return p, nil
 }
 
@@ -41,6 +41,6 @@ func (p *Partition) NewSegment() error {
 	return err
 }
 
-func (p *Partition) Assign(lsn, gsn int64) error {
-	return nil
+func (p *Partition) Assign(lsn int64, length int32, gsn int64) {
+	p.activeSegment.Assign(int32(lsn-p.activeBaseLSN), length, gsn)
 }
