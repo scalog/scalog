@@ -34,8 +34,9 @@ func (s *Storage) WritePartition(id int32, record string) (int64, error) {
 	return lsn, err
 }
 
-func (s *Storage) Assign(partitionID int32, lsn int64, length int32, gsn int64) {
-	s.partitions[partitionID].Assign(lsn, length, gsn)
+func (s *Storage) Assign(partitionID int32, lsn int64, length int32, gsn int64) error {
+	// TODO handle errors: keep retrying
+	return s.partitions[partitionID].Assign(lsn, length, gsn)
 }
 
 func (s *Storage) Read(gsn int64) (string, error) {

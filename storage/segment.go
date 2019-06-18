@@ -11,6 +11,7 @@ import (
 const LogMetaDataLength = 4
 
 type Segment struct {
+	closed  bool
 	baseLSN int64
 	baseGSN int64
 	nextSSN int32
@@ -24,7 +25,7 @@ type Segment struct {
 
 func NewSegment(baseLSN int64) (*Segment, error) {
 	var err error
-	s := &Segment{baseLSN: baseLSN, nextSSN: 0, logPos: 0}
+	s := &Segment{closed: false, baseLSN: baseLSN, nextSSN: 0, logPos: 0}
 	s.tmp = make([]byte, LogMetaDataLength)
 	s.logFile, err = os.Create(fmt.Sprintf("%v.log", baseLSN))
 	if err != nil {
@@ -34,7 +35,7 @@ func NewSegment(baseLSN int64) (*Segment, error) {
 }
 
 func RecoverSegment(baseLSN int64) (*Segment, error) {
-	s := &Segment{baseLSN: baseLSN}
+	s := &Segment{closed: false, baseLSN: baseLSN, nextSSN: 0, logPos: 0}
 	// read the log file and reconstruct content for ssnFile and gsnFile
 	file, err := os.OpenFile(fmt.Sprintf("%v.log", baseLSN), os.O_RDONLY, 0644)
 	if err != nil {
@@ -42,7 +43,7 @@ func RecoverSegment(baseLSN int64) (*Segment, error) {
 	}
 	defer file.Close()
 	b := make([]byte, 1024*1024) // maximum record size is 1MB
-	for i := int32(0); ; i++ {
+	for {
 		l, err := file.Read(s.tmp)
 		if err == io.EOF {
 			break
@@ -64,8 +65,9 @@ func RecoverSegment(baseLSN int64) (*Segment, error) {
 		if l != int(ll) {
 			return nil, fmt.Errorf("Read log file %v error: expect length %v, get %v", baseLSN, ll, l)
 		}
-		s.ssnMap[i] = s.logPos
+		s.ssnMap[s.nextSSN] = s.logPos
 		s.logPos += 4 + int32(ll)
+		s.nextSSN++
 	}
 	// open the file in append mode to continue functioning
 	s.logFile, err = os.OpenFile(fmt.Sprintf("%v.log", baseLSN), os.O_APPEND, 0644)
@@ -76,6 +78,9 @@ func RecoverSegment(baseLSN int64) (*Segment, error) {
 }
 
 func (s *Segment) Write(record string) (int32, error) {
+	if s.closed {
+		return 0, fmt.Errorf("Segment closed")
+	}
 	var err error
 	ssn := s.nextSSN
 	s.ssnMap[ssn] = s.logPos
@@ -95,11 +100,19 @@ func (s *Segment) Write(record string) (int32, error) {
 	return ssn, nil
 }
 
-func (s *Segment) Assign(ssn, length int32, gsn int64) {
+func (s *Segment) Assign(ssn, length int32, gsn int64) error {
+	if s.closed {
+		return fmt.Errorf("Segment closed")
+	}
 	gsnOffset := int32(gsn - s.baseGSN)
 	for i := int32(0); i < length; i++ {
-		s.gsnMap[gsnOffset+i] = s.ssnMap[ssn+i]
+		if pos, ok := s.ssnMap[ssn+i]; ok {
+			s.gsnMap[gsnOffset+i] = pos
+		} else {
+			return fmt.Errorf("No date in ssn=%v", ssn+i)
+		}
 	}
+	return nil
 }
 
 func writeMapToDisk(f string, m map[int32]int32) error {
@@ -130,6 +143,12 @@ func writeMapToDisk(f string, m map[int32]int32) error {
 }
 
 func (s *Segment) Close() error {
+	if s.closed {
+		return fmt.Errorf("Segment closed")
+	}
+	if len(s.ssnMap) != len(s.gsnMap) {
+		return fmt.Errorf("Unable to close the segment: ssnMap size %v != gsnMap size %v", len(s.ssnMap), len(s.gsnMap))
+	}
 	err := s.logFile.Close()
 	if err != nil {
 		return err
@@ -138,7 +157,7 @@ func (s *Segment) Close() error {
 	if err != nil {
 		return err
 	}
-	err = writeMapToDisk(fmt.Sprintf("%v.gsn", s.baseLSN), s.ssnMap)
+	err = writeMapToDisk(fmt.Sprintf("%v.gsn", s.baseLSN), s.gsnMap)
 	if err != nil {
 		return err
 	}

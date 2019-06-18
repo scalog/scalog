@@ -41,6 +41,6 @@ func (p *Partition) NewSegment() error {
 	return err
 }
 
-func (p *Partition) Assign(lsn int64, length int32, gsn int64) {
-	p.activeSegment.Assign(int32(lsn-p.activeBaseLSN), length, gsn)
+func (p *Partition) Assign(lsn int64, length int32, gsn int64) error {
+	return p.activeSegment.Assign(int32(lsn-p.activeBaseLSN), length, gsn)
 }
