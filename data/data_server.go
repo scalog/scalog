@@ -122,28 +122,26 @@ func (server *DataServer) replicateRecords(i int32) {
 	}
 }
 
+// processAppend sends records to replicateC and replicates them to peers
 func (server *DataServer) processAppend() {
 	for {
 		select {
 		case record := <-server.appendC:
 			record.LocalReplicaID = server.localReplicaID
+			server.ReplicateC <- record
 			for _, c := range server.replicateSendC {
 				c <- record
-			}
-			_, err := server.storage.Write(record.Record)
-			if err != nil {
-				log.Fatalf("Write to storage failed: %v", err)
 			}
 		}
 	}
 }
 
+// processReplicate writes records to local storage
 func (server *DataServer) processReplicate() {
 	for {
 		select {
-		case record := <-server.appendC:
-			// TODO write to the proper partition
-			_, err := server.storage.Write(record.Record)
+		case record := <-server.replicateC:
+			_, err := server.storage.WriteToPartition(record.LocalReplicaID, record.Record)
 			if err != nil {
 				log.Fatalf("Write to storage failed: %v", err)
 			}
