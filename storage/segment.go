@@ -17,16 +17,18 @@ type Segment struct {
 	nextSSN int32
 	logPos  int32
 	logFile *os.File
-	ssnMap  map[int32]int32
+	lsnMap  map[int32]int32
 	gsnMap  map[int32]int32
 
-	tmp []byte // reuse this across the lifetime of the segment
+	t []byte // metadata: reuse this across the lifetime of the segment
+	b []byte // record: reuse this across the lifetime of the segment
 }
 
 func NewSegment(baseLSN int64) (*Segment, error) {
 	var err error
 	s := &Segment{closed: false, baseLSN: baseLSN, nextSSN: 0, logPos: 0}
-	s.tmp = make([]byte, LogMetaDataLength)
+	s.t = make([]byte, LogMetaDataLength)
+	s.b = make([]byte, 1024*1024) // maximum record size is 1MB
 	s.logFile, err = os.Create(fmt.Sprintf("%v.log", baseLSN))
 	if err != nil {
 		return nil, err
@@ -35,6 +37,7 @@ func NewSegment(baseLSN int64) (*Segment, error) {
 }
 
 func RecoverSegment(baseLSN int64) (*Segment, error) {
+	// TODO check if lsn map and gsn map exist: if they do, load them
 	s := &Segment{closed: false, baseLSN: baseLSN, nextSSN: 0, logPos: 0}
 	// read the log file and reconstruct content for ssnFile and gsnFile
 	file, err := os.OpenFile(fmt.Sprintf("%v.log", baseLSN), os.O_RDONLY, 0644)
@@ -42,9 +45,8 @@ func RecoverSegment(baseLSN int64) (*Segment, error) {
 		return nil, err
 	}
 	defer file.Close()
-	b := make([]byte, 1024*1024) // maximum record size is 1MB
 	for {
-		l, err := file.Read(s.tmp)
+		l, err := file.Read(s.t)
 		if err == io.EOF {
 			break
 		}
@@ -54,8 +56,8 @@ func RecoverSegment(baseLSN int64) (*Segment, error) {
 		if l != LogMetaDataLength {
 			return nil, fmt.Errorf("Read log file %v error: expect length %v, get %v", baseLSN, LogMetaDataLength, l)
 		}
-		ll := binary.LittleEndian.Uint32(s.tmp)
-		l, err = file.Read(b[:ll])
+		ll := binary.LittleEndian.Uint32(s.t)
+		l, err = file.Read(s.b[:ll])
 		if err == io.EOF {
 			return nil, fmt.Errorf("Unexpected EOF when reading log file %v error", baseLSN)
 		}
@@ -65,12 +67,12 @@ func RecoverSegment(baseLSN int64) (*Segment, error) {
 		if l != int(ll) {
 			return nil, fmt.Errorf("Read log file %v error: expect length %v, get %v", baseLSN, ll, l)
 		}
-		s.ssnMap[s.nextSSN] = s.logPos
+		s.lsnMap[s.nextSSN] = s.logPos
 		s.logPos += 4 + int32(ll)
 		s.nextSSN++
 	}
 	// open the file in append mode to continue functioning
-	s.logFile, err = os.OpenFile(fmt.Sprintf("%v.log", baseLSN), os.O_APPEND, 0644)
+	s.logFile, err = os.OpenFile(fmt.Sprintf("%v.log", baseLSN), os.O_APPEND|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, err
 	}
@@ -83,13 +85,13 @@ func (s *Segment) Write(record string) (int32, error) {
 	}
 	var err error
 	ssn := s.nextSSN
-	s.ssnMap[ssn] = s.logPos
+	s.lsnMap[ssn] = s.logPos
 	// each record is structured as length+record
 	l := int32(len(record))
 	s.logPos += LogMetaDataLength + l
 	s.nextSSN++
-	binary.LittleEndian.PutUint32(s.tmp, uint32(l))
-	_, err = s.logFile.Write(s.tmp)
+	binary.LittleEndian.PutUint32(s.t, uint32(l))
+	_, err = s.logFile.Write(s.t)
 	if err != nil {
 		return 0, err
 	}
@@ -106,7 +108,7 @@ func (s *Segment) Assign(ssn, length int32, gsn int64) error {
 	}
 	gsnOffset := int32(gsn - s.baseGSN)
 	for i := int32(0); i < length; i++ {
-		if pos, ok := s.ssnMap[ssn+i]; ok {
+		if pos, ok := s.lsnMap[ssn+i]; ok {
 			s.gsnMap[gsnOffset+i] = pos
 		} else {
 			return fmt.Errorf("No date in ssn=%v", ssn+i)
@@ -146,14 +148,14 @@ func (s *Segment) Close() error {
 	if s.closed {
 		return fmt.Errorf("Segment closed")
 	}
-	if len(s.ssnMap) != len(s.gsnMap) {
-		return fmt.Errorf("Unable to close the segment: ssnMap size %v != gsnMap size %v", len(s.ssnMap), len(s.gsnMap))
+	if len(s.lsnMap) != len(s.gsnMap) {
+		return fmt.Errorf("Unable to close the segment: lsnMap size %v != gsnMap size %v", len(s.lsnMap), len(s.gsnMap))
 	}
 	err := s.logFile.Close()
 	if err != nil {
 		return err
 	}
-	err = writeMapToDisk(fmt.Sprintf("%v.ssn", s.baseLSN), s.ssnMap)
+	err = writeMapToDisk(fmt.Sprintf("%v.ssn", s.baseLSN), s.lsnMap)
 	if err != nil {
 		return err
 	}
@@ -162,4 +164,37 @@ func (s *Segment) Close() error {
 		return err
 	}
 	return nil
+}
+
+func (s *Segment) Read(gsn int64) (string, error) {
+	return s.ReadGSN(gsn)
+}
+
+func (s *Segment) ReadLSN(lsn int64) (string, error) {
+	pos := s.lsnMap[int32(lsn-s.baseLSN)]
+	return s.ReadPos(int64(pos))
+}
+
+func (s *Segment) ReadGSN(gsn int64) (string, error) {
+	pos := s.gsnMap[int32(gsn-s.baseGSN)]
+	return s.ReadPos(int64(pos))
+}
+
+func (s *Segment) ReadPos(pos int64) (string, error) {
+	l, err := s.logFile.ReadAt(s.t, pos)
+	if err != nil {
+		return "", err
+	}
+	if l != LogMetaDataLength {
+		return "", fmt.Errorf("Read log file %v error: expect length %v, get %v", s.baseLSN, LogMetaDataLength, l)
+	}
+	ll := binary.LittleEndian.Uint32(s.t)
+	l, err = s.logFile.ReadAt(s.b[:ll], pos+4)
+	if err != nil {
+		return "", err
+	}
+	if l != int(ll) {
+		return "", fmt.Errorf("Read log file %v error: expect length %v, get %v", s.baseLSN, ll, l)
+	}
+	return string(s.b[:ll]), nil
 }
