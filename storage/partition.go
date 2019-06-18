@@ -33,6 +33,37 @@ func (p *Partition) Write(record string) (int64, error) {
 	return lsn, err
 }
 
+func (p *Partition) Read(gsn int64) (string, error) {
+	return p.ReadGSN(gsn)
+}
+
+func (p *Partition) ReadGSN(gsn int64) (string, error) {
+	f := func(s *Segment) int64 {
+		return s.BaseGSN
+	}
+	s := binarySearch(p.segments, f, gsn)
+	return s.ReadLSN(gsn)
+}
+
+func (p *Partition) ReadLSN(lsn int64) (string, error) {
+	f := func(s *Segment) int64 {
+		return s.BaseLSN
+	}
+	s := binarySearch(p.segments, f, lsn)
+	return s.ReadLSN(lsn)
+}
+
+func binarySearch(segs []*Segment, get func(*Segment) int64, target int64) *Segment {
+	// Currently the function is scanning the list.
+	// TODO: implement binary search.
+	for i, s := range segs {
+		if get(s) > target {
+			return segs[i-1]
+		}
+	}
+	return nil
+}
+
 func (p *Partition) NewSegment() error {
 	var err error
 	p.activeBaseLSN += int64(p.segLen)
