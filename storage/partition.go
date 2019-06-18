@@ -39,14 +39,20 @@ func (p *Partition) Read(gsn int64) (string, error) {
 }
 
 func (p *Partition) ReadGSN(gsn int64) (string, error) {
+	if gsn > p.activeSegment.BaseGSN {
+		return p.activeSegment.ReadGSN(gsn)
+	}
 	f := func(s *Segment) int64 {
 		return s.BaseGSN
 	}
 	s := binarySearch(p.segments, f, gsn)
-	return s.ReadLSN(gsn)
+	return s.ReadGSN(gsn)
 }
 
 func (p *Partition) ReadLSN(lsn int64) (string, error) {
+	if lsn >= p.activeSegment.BaseLSN {
+		return p.activeSegment.ReadLSN(lsn)
+	}
 	f := func(s *Segment) int64 {
 		return s.BaseLSN
 	}
@@ -57,12 +63,15 @@ func (p *Partition) ReadLSN(lsn int64) (string, error) {
 func binarySearch(segs []*Segment, get func(*Segment) int64, target int64) *Segment {
 	// Currently the function is scanning the list.
 	// TODO: implement binary search.
+	if len(segs) == 0 {
+		return nil
+	}
 	for i, s := range segs {
-		if get(s) > target {
+		if get(s) >= target {
 			return segs[i-1]
 		}
 	}
-	return nil
+	return segs[len(segs)-1]
 }
 
 func (p *Partition) CreateSegment() error {
