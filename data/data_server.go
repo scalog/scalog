@@ -128,7 +128,7 @@ func (server *DataServer) processAppend() {
 		select {
 		case record := <-server.appendC:
 			record.LocalReplicaID = server.localReplicaID
-			server.ReplicateC <- record
+			server.replicateC <- record
 			for _, c := range server.replicateSendC {
 				c <- record
 			}
