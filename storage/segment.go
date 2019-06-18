@@ -44,25 +44,25 @@ func RecoverSegment(baseLSN int64) (*Segment, error) {
 	b := make([]byte, 1024*1024) // maximum record size is 1MB
 	for i := int32(0); ; i++ {
 		l, err := file.Read(s.tmp)
-		if l != LogMetaDataLength {
-			return nil, fmt.Errorf("Read log file %v error: expect length %v, get %v", baseLSN, LogMetaDataLength, l)
-		}
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return nil, err
 		}
+		if l != LogMetaDataLength {
+			return nil, fmt.Errorf("Read log file %v error: expect length %v, get %v", baseLSN, LogMetaDataLength, l)
+		}
 		ll := binary.LittleEndian.Uint32(s.tmp)
 		l, err = file.Read(b[:ll])
-		if l != int(ll) {
-			return nil, fmt.Errorf("Read log file %v error: expect length %v, get %v", baseLSN, ll, l)
-		}
 		if err == io.EOF {
 			return nil, fmt.Errorf("Unexpected EOF when reading log file %v error", baseLSN)
 		}
 		if err != nil {
 			return nil, err
+		}
+		if l != int(ll) {
+			return nil, fmt.Errorf("Read log file %v error: expect length %v, get %v", baseLSN, ll, l)
 		}
 		s.ssnMap[i] = s.logPos
 		s.logPos += 4 + int32(ll)
