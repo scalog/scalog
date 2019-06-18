@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/scalog/scalogger/order/orderpb"
+	"github.com/scalog/scalog/order/orderpb"
 )
 
 type OrderServer struct {

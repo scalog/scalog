@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
-	log "github.com/scalog/scalogger/logger"
-	"github.com/scalog/scalogger/order/orderpb"
+	log "github.com/scalog/scalog/logger"
+	"github.com/scalog/scalog/order/orderpb"
 
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"

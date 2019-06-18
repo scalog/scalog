@@ -1,2 +1,2 @@
-# scalogger
+# scalog
 reimplement scalog from scratch

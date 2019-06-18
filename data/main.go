@@ -1,7 +1,7 @@
 package data
 
 import (
-	log "github.com/scalog/scalogger/logger"
+	log "github.com/scalog/scalog/logger"
 
 	"github.com/spf13/viper"
 )

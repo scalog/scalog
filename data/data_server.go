@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/scalog/scalogger/data/datapb"
-	log "github.com/scalog/scalogger/logger"
-	"github.com/scalog/scalogger/storage"
+	"github.com/scalog/scalog/data/datapb"
+	log "github.com/scalog/scalog/logger"
+	"github.com/scalog/scalog/storage"
 
 	"google.golang.org/grpc"
 )

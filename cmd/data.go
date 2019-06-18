@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/scalog/scalogger/data"
+	"github.com/scalog/scalog/data"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/scalog/scalogger/order/orderpb"
+	"github.com/scalog/scalog/order/orderpb"
 
 	"google.golang.org/grpc"
 )

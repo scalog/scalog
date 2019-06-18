@@ -2,10 +2,10 @@
 FROM golang:1.12 as builder
 
 # Copy everything from the current directory to the PWD(Present Working Directory) inside the container
-COPY . /go/src/github.com/scalog/scalogger/
+COPY . /go/src/github.com/scalog/scalog/
 
 # Set the Current Working Directory inside the container
-WORKDIR /go/src/github.com/scalog/scalogger/
+WORKDIR /go/src/github.com/scalog/scalog/
 
 # Download dependencies
 RUN set -x && \
@@ -14,7 +14,7 @@ RUN set -x && \
 
 # Build the Go app
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags \
-    '-extldflags "-static"' -o scalogger .
+    '-extldflags "-static"' -o scalog .
 
 ######## Start a new stage from scratch #######
 FROM alpine:latest
@@ -27,7 +27,7 @@ RUN GRPC_HEALTH_PROBE_VERSION=v0.2.0 && \
     chmod +x /bin/grpc_health_probe
 
 # Copy the Pre-built binary file from the previous stage
-COPY --from=builder /go/src/github.com/scalog/scalogger/scalogger /app/
+COPY --from=builder /go/src/github.com/scalog/scalog/scalog /app/
 
 WORKDIR /app
 

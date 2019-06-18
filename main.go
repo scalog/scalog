@@ -1,6 +1,6 @@
 package main
 
-import "github.com/scalog/scalogger/cmd"
+import "github.com/scalog/scalog/cmd"
 
 func main() {
 	cmd.Execute()
