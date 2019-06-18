@@ -43,6 +43,11 @@ func TestNewSegment(t *testing.T) {
 	if r != record {
 		t.Errorf("Read error: expect '%v', get '%v'", record, r)
 	}
+	r, err = s.ReadGSN(100)
+	check(t, err)
+	if r != record {
+		t.Errorf("Read error: expect '%v', get '%v'", record, r)
+	}
 
 	err = os.RemoveAll("tmp")
 	check(t, err)
