@@ -20,7 +20,7 @@ func NewStorage(path string, partitionID, numPartitions, segLen int32) (*Storage
 	}
 	s.partitions = make([]*Partition, numPartitions)
 	for i := int32(0); i < numPartitions; i++ {
-		s.partitions[i], err = NewPartition(segLen)
+		s.partitions[i], err = NewPartition(path, segLen)
 		if err != nil {
 			return nil, err
 		}

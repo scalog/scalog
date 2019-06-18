@@ -1,6 +1,7 @@
 package storage
 
 type Partition struct {
+	path          string
 	nextLSN       int64
 	segments      []*Segment
 	activeSegment *Segment
@@ -8,11 +9,11 @@ type Partition struct {
 	segLen        int32
 }
 
-func NewPartition(segLen int32) (*Partition, error) {
+func NewPartition(path string, segLen int32) (*Partition, error) {
 	var err error
-	p := &Partition{nextLSN: 0, activeBaseLSN: 0}
+	p := &Partition{path: path, nextLSN: 0, activeBaseLSN: 0}
 	p.segments = make([]*Segment, 0)
-	p.activeSegment, err = NewSegment(p.activeBaseLSN)
+	p.activeSegment, err = NewSegment(path, p.activeBaseLSN)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +26,7 @@ func (p *Partition) Write(record string) (int64, error) {
 	p.nextLSN++
 	ssn, err := p.activeSegment.Write(record)
 	if ssn >= p.segLen {
-		err := p.NewSegment()
+		err := p.CreateSegment()
 		if err != nil {
 			return 0, err
 		}
@@ -64,11 +65,11 @@ func binarySearch(segs []*Segment, get func(*Segment) int64, target int64) *Segm
 	return nil
 }
 
-func (p *Partition) NewSegment() error {
+func (p *Partition) CreateSegment() error {
 	var err error
 	p.activeBaseLSN += int64(p.segLen)
 	p.segments = append(p.segments, p.activeSegment)
-	p.activeSegment, err = NewSegment(p.activeBaseLSN)
+	p.activeSegment, err = NewSegment(p.path, p.activeBaseLSN)
 	return err
 }
 
