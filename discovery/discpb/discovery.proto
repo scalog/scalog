@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package discpb;
+
+service Discovery {
+	rpc Discover(Empty) returns (stream View) {}
+}
+
+message Empty {}
+
+message View {
+	int32 viewID = 1;
+	repeated int32 liveShards = 2;
+	repeated int32 finalizedShards = 3;
+}
