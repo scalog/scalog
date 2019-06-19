@@ -4,7 +4,6 @@ import (
 	"github.com/scalog/scalog/discovery"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // discoveryCmd represents the discovery command
