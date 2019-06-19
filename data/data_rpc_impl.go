@@ -63,7 +63,7 @@ func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream 
 	}
 }
 
-func (server *DataServer) Replicate(stream datapb.Data_AppendServer) error {
+func (server *DataServer) Replicate(stream datapb.Data_ReplicateServer) error {
 	for {
 		select {
 		default:
@@ -80,8 +80,8 @@ func (server *DataServer) Replicate(stream datapb.Data_AppendServer) error {
 }
 
 // TODO implement the trim operation
-func (server *DataServer) Trim(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Empty, error) {
-	return &datapb.Empty{}, nil
+func (server *DataServer) Trim(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Ack, error) {
+	return &datapb.Ack{}, nil
 }
 
 func (server *DataServer) Read(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Record, error) {
