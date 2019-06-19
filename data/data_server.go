@@ -38,6 +38,7 @@ type DataServer struct {
 	subCMu           sync.RWMutex
 	orderMu          sync.RWMutex
 	storage          *storage.Storage
+	peerDoneC        []chan interface{}
 }
 
 func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr string) *DataServer {
@@ -54,6 +55,7 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	server.appendC = make(chan *datapb.Record)
 	server.replicateC = make(chan *datapb.Record)
 	server.replicateSendC = make([]chan *datapb.Record, numReplica)
+	server.peerDoneC = make([]chan interface{}, numReplica)
 	path := fmt.Sprintf("storage-%v-%v", shardID, replicaID) // TODO configure path
 	segLen := int32(1000)                                    // TODO configurable segment length
 	storage, err := storage.NewStorage(path, replicaID, numReplica, segLen)
@@ -97,33 +99,19 @@ func (server *DataServer) UpdatePeers(peers string) error {
 	if int32(len(ps)) != server.numReplica {
 		return fmt.Errorf("the number of peers in peer list doesn't match the number of replicas: %v vs %v", len(ps), server.numReplica)
 	}
-	// close existing network connections if they exist
-	if server.peerConns != nil {
-		for _, c := range server.peerConns {
-			c.Close()
-		}
-	}
 	// create connections with peers
 	server.peers = ps
 	server.peerConns = make([]*grpc.ClientConn, server.numReplica)
 	server.peerClients = make([]*datapb.Data_ReplicateClient, server.numReplica)
-	opts := []grpc.DialOption{grpc.WithInsecure()}
 	for i := int32(0); i < server.numReplica; i++ {
-		if i == server.localReplicaID {
+		err := server.connectToPeers(i)
+		if err != nil {
+			log.Errorf("%v", err)
 			continue
 		}
-		conn, err := grpc.Dial(server.peers[i], opts...)
-		if err != nil {
-			log.Fatalf("Dial peer %v failed: %v", server.peers[i], err)
-		}
-		server.peerConns[i] = conn
-		dataClient := datapb.NewDataClient(conn)
-		replicateSendClient, err := dataClient.Replicate(context.Background())
-		if err != nil {
-			return fmt.Errorf("Create replicate client to %v failed: %v", server.peers[i], err)
-		}
-		server.peerClients[i] = &replicateSendClient
-		go server.replicateRecords(i)
+		done := make(chan interface{})
+		go server.replicateRecords(done, server.replicateSendC[i], server.peerClients[i])
+		server.peerDoneC[i] = done
 	}
 	return nil
 }
@@ -133,16 +121,48 @@ func (server *DataServer) Start() {
 	go server.processReplicate()
 }
 
-func (server *DataServer) replicateRecords(i int32) {
-	ch := server.replicateSendC[i]
-	client := *server.peerClients[i]
+func (server *DataServer) connectToPeers(peer int32) error {
+	if peer == server.localReplicaID {
+		return nil // do not connect to the node itself
+	}
+	// close existing network connections if they exist
+	if server.peerConns[peer] != nil {
+		for _, c := range server.peerConns {
+			c.Close()
+		}
+	}
+	if server.peerDoneC[peer] != nil {
+		close(server.peerDoneC[peer])
+	}
+	// build connections to peers
+	opts := []grpc.DialOption{grpc.WithInsecure()}
+	conn, err := grpc.Dial(server.peers[peer], opts...)
+	if err != nil {
+		return fmt.Errorf("Dial peer %v failed: %v", server.peers[peer], err)
+	}
+	server.peerConns[peer] = conn
+	dataClient := datapb.NewDataClient(conn)
+	replicateSendClient, err := dataClient.Replicate(context.Background())
+	if err != nil {
+		return fmt.Errorf("Create replicate client to %v failed: %v", server.peers[peer], err)
+	}
+	if server.peerConns[peer] != nil {
+		server.peerConns[peer].Close()
+	}
+	server.peerClients[peer] = &replicateSendClient
+	return nil
+}
+
+func (server *DataServer) replicateRecords(done <-chan interface{}, ch chan *datapb.Record, client *datapb.Data_ReplicateClient) {
 	for {
 		select {
 		case record := <-ch:
-			err := client.Send(record)
+			err := (*client).Send(record)
 			if err != nil {
-				log.Errorf("Send record to peer %v error: %v", i, err)
+				log.Errorf("Send record error: %v", err)
 			}
+		case <-done:
+			return
 		}
 	}
 }
