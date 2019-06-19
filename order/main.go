@@ -16,6 +16,7 @@ import (
 )
 
 func Start() {
+	// read configuration
 	numReplica := int32(viper.GetInt("order-replication-factor"))
 	dataNumReplica := int32(viper.GetInt("data-replication-factor"))
 	batchingInterval, err := time.ParseDuration(viper.GetString("order-batching-interval"))
@@ -27,7 +28,7 @@ func Start() {
 	log.Infof("Starting order server %v at 0.0.0.0:%v", index, port)
 	log.Infof("replication-factor: %v", numReplica)
 	log.Infof("order-batching-interval: %v", batchingInterval)
-
+	// listen to the port
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
 		log.Fatalf("Failed to listen to port %v: %v", port, err)
@@ -37,15 +38,15 @@ func Start() {
 			MaxConnectionIdle: 5 * time.Minute,
 		}),
 	)
-
+	// health server
 	healthServer := health.NewServer()
 	healthServer.Resume()
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
-
+	// order server
 	server := NewOrderServer(index, numReplica, dataNumReplica, batchingInterval)
 	orderpb.RegisterOrderServer(grpcServer, server)
 	server.Start()
-
+	// serve grpc server
 	err = grpcServer.Serve(lis)
 	if err != nil {
 		log.Fatalf("Failed to server grpc: %v", err)
