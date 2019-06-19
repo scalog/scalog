@@ -9,6 +9,7 @@ import (
 
 	"github.com/scalog/scalog/data/datapb"
 	log "github.com/scalog/scalog/logger"
+	"github.com/scalog/scalog/order/orderpb"
 	"github.com/scalog/scalog/storage"
 
 	"google.golang.org/grpc"
@@ -24,6 +25,9 @@ type DataServer struct {
 	peers            []string
 	peerConns        []*grpc.ClientConn
 	peerClients      []*datapb.Data_ReplicateClient
+	orderAddr        string
+	orderConn        *grpc.ClientConn
+	orderClient      *orderpb.Order_ReportClient
 	batchingInterval time.Duration
 	appendC          chan *datapb.Record
 	replicateC       chan *datapb.Record
@@ -32,10 +36,11 @@ type DataServer struct {
 	ackCMu           sync.RWMutex
 	subC             map[int32]chan *datapb.Record
 	subCMu           sync.RWMutex
+	orderMu          sync.RWMutex
 	storage          *storage.Storage
 }
 
-func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string) *DataServer {
+func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr string) *DataServer {
 	server := &DataServer{
 		localReplicaID:   replicaID,
 		shardID:          shardID,
@@ -59,19 +64,38 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	for i := int32(0); i < numReplica; i++ {
 		server.replicateSendC[i] = make(chan *datapb.Record)
 	}
+	server.UpdateOrderAddr(orderAddr)
 	server.UpdatePeers(peers)
 	return server
+}
+
+func (server *DataServer) UpdateOrderAddr(addr string) error {
+	server.orderMu.Lock()
+	defer server.orderMu.Unlock()
+	server.orderAddr = addr
+	opts := []grpc.DialOption{grpc.WithInsecure()}
+	conn, err := grpc.Dial(addr, opts...)
+	if err != nil {
+		return fmt.Errorf("Dial peer %v failed: %v", addr, err)
+	}
+	server.orderConn = conn
+	orderClient := orderpb.NewOrderClient(conn)
+	orderReportClient, err := orderClient.Report(context.Background())
+	if err != nil {
+		return fmt.Errorf("Create replicate client to %v failed: %v", addr, err)
+	}
+	server.orderClient = &orderReportClient
+	return nil
 }
 
 // UpdatePeers updates the peer list of the shard. It should be called only at
 // the initialization phase of the server.
 // TODO make the list updatable when running
-func (server *DataServer) UpdatePeers(peers string) {
+func (server *DataServer) UpdatePeers(peers string) error {
 	// check if the number of peers matches that in the configuration
 	ps := strings.Split(peers, ",")
 	if int32(len(ps)) != server.numReplica {
-		log.Errorf("the number of peers in peer list doesn't match the number of replicas: %v vs %v", len(ps), server.numReplica)
-		return
+		return fmt.Errorf("the number of peers in peer list doesn't match the number of replicas: %v vs %v", len(ps), server.numReplica)
 	}
 	// close existing network connections if they exist
 	if server.peerConns != nil {
@@ -96,11 +120,12 @@ func (server *DataServer) UpdatePeers(peers string) {
 		dataClient := datapb.NewDataClient(conn)
 		replicateSendClient, err := dataClient.Replicate(context.Background())
 		if err != nil {
-			log.Fatalf("Create replicate client to %v failed: %v", server.peers[i], err)
+			return fmt.Errorf("Create replicate client to %v failed: %v", server.peers[i], err)
 		}
 		server.peerClients[i] = &replicateSendClient
 		go server.replicateRecords(i)
 	}
+	return nil
 }
 
 func (server *DataServer) Start() {
