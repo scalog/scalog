@@ -16,36 +16,41 @@ import (
 )
 
 type DataServer struct {
+	// data server configurations
 	shardID          int32
-	localReplicaID   int32
-	globalReplicaID  int32
-	clientID         int32
+	replicaID        int32
 	numReplica       int32
-	viewID           int32
-	peers            []string
-	peerConns        []*grpc.ClientConn
-	peerClients      []*datapb.Data_ReplicateClient
-	orderAddr        string
-	orderConn        *grpc.ClientConn
-	orderClient      *orderpb.Order_ReportClient
 	batchingInterval time.Duration
-	appendC          chan *datapb.Record
-	replicateC       chan *datapb.Record
-	replicateSendC   []chan *datapb.Record
-	ackC             map[int32]chan *datapb.Ack
-	ackCMu           sync.RWMutex
-	subC             map[int32]chan *datapb.Record
-	subCMu           sync.RWMutex
-	orderMu          sync.RWMutex
-	storage          *storage.Storage
-	peerDoneC        []chan interface{}
+	// server state
+	clientID int32 // incremental counter to distinguish clients
+	viewID   int32
+	// ordering layer information
+	orderAddr   string
+	orderConn   *grpc.ClientConn
+	orderClient *orderpb.Order_ReportClient
+	orderMu     sync.RWMutex
+	// peer information
+	peers       []string
+	peerConns   []*grpc.ClientConn
+	peerClients []*datapb.Data_ReplicateClient
+	peerDoneC   []chan interface{}
+	peerMu      sync.Mutex
+	// channels used to communate with clients, peers, and ordering layer
+	appendC        chan *datapb.Record
+	replicateC     chan *datapb.Record
+	replicateSendC []chan *datapb.Record
+	ackC           map[int32]chan *datapb.Ack
+	ackCMu         sync.RWMutex
+	subC           map[int32]chan *datapb.Record
+	subCMu         sync.RWMutex
+
+	storage *storage.Storage
 }
 
 func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr string) *DataServer {
 	server := &DataServer{
-		localReplicaID:   replicaID,
+		replicaID:        replicaID,
 		shardID:          shardID,
-		globalReplicaID:  shardID*numReplica + replicaID,
 		clientID:         0,
 		viewID:           0,
 		batchingInterval: batchingInterval,
@@ -110,8 +115,12 @@ func (server *DataServer) UpdatePeers(peers string) error {
 			continue
 		}
 		done := make(chan interface{})
-		go server.replicateRecords(done, server.replicateSendC[i], server.peerClients[i])
+		server.peerMu.Lock()
+		sendC := server.replicateSendC[i]
+		client := server.peerClients[i]
 		server.peerDoneC[i] = done
+		server.peerMu.Unlock()
+		go server.replicateRecords(done, sendC, client)
 	}
 	return nil
 }
@@ -122,17 +131,20 @@ func (server *DataServer) Start() {
 }
 
 func (server *DataServer) connectToPeers(peer int32) error {
-	if peer == server.localReplicaID {
-		return nil // do not connect to the node itself
+	server.peerMu.Lock()
+	defer server.peerMu.Unlock()
+	// do not connect to the node itself
+	if peer == server.replicaID {
+		return nil
 	}
 	// close existing network connections if they exist
 	if server.peerConns[peer] != nil {
-		for _, c := range server.peerConns {
-			c.Close()
-		}
+		server.peerConns[peer].Close()
+		server.peerConns[peer] = nil
 	}
 	if server.peerDoneC[peer] != nil {
 		close(server.peerDoneC[peer])
+		server.peerDoneC = nil
 	}
 	// build connections to peers
 	opts := []grpc.DialOption{grpc.WithInsecure()}
@@ -172,7 +184,7 @@ func (server *DataServer) processAppend() {
 	for {
 		select {
 		case record := <-server.appendC:
-			record.LocalReplicaID = server.localReplicaID
+			record.LocalReplicaID = server.replicaID
 			server.replicateC <- record
 			for _, c := range server.replicateSendC {
 				c <- record
