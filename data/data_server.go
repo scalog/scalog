@@ -79,6 +79,9 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 func (server *DataServer) UpdateOrderAddr(addr string) error {
 	server.orderMu.Lock()
 	defer server.orderMu.Unlock()
+	if server.orderConn != nil {
+		server.orderConn.Close()
+	}
 	server.orderAddr = addr
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	conn, err := grpc.Dial(addr, opts...)
