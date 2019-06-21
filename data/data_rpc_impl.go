@@ -37,31 +37,31 @@ func (server *DataServer) Append(stream datapb.Data_AppendServer) error {
 
 func (server *DataServer) AppendOne(ctx context.Context, record *datapb.Record) (*datapb.Ack, error) {
 	server.appendC <- record
-	// TODO
-	return &datapb.Ack{}, nil
+	ack := server.WaitForAck(record.ClientID, record.ClientSN)
+	return ack, nil
 }
 
 func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream datapb.Data_AppendServer) {
-	ackC := make(chan *datapb.Ack)
-	server.ackCMu.Lock()
-	server.ackC[cid] = ackC
-	server.ackCMu.Unlock()
+	ackSendC := make(chan *datapb.Ack)
+	server.ackSendCMu.Lock()
+	server.ackSendC[cid] = ackSendC
+	server.ackSendCMu.Unlock()
 	for {
 		select {
 		case <-done:
-			server.ackCMu.Lock()
-			delete(server.ackC, cid)
-			server.ackCMu.Unlock()
+			server.ackSendCMu.Lock()
+			delete(server.ackSendC, cid)
+			server.ackSendCMu.Unlock()
 			log.Infof("Client %v is closed", cid)
-			close(ackC)
+			close(ackSendC)
 			return
-		case ack := <-ackC:
+		case ack := <-ackSendC:
 			if err := stream.Send(ack); err != nil {
-				server.ackCMu.Lock()
-				delete(server.ackC, cid)
-				server.ackCMu.Unlock()
+				server.ackSendCMu.Lock()
+				delete(server.ackSendC, cid)
+				server.ackSendCMu.Unlock()
 				log.Infof("Client %v is closed", cid)
-				close(ackC)
+				close(ackSendC)
 				close(done)
 				return
 			}

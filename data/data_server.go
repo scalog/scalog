@@ -39,12 +39,16 @@ type DataServer struct {
 	appendC        chan *datapb.Record
 	replicateC     chan *datapb.Record
 	replicateSendC []chan *datapb.Record
-	ackC           map[int32]chan *datapb.Ack
-	ackCMu         sync.RWMutex
+	ackC           chan *datapb.Ack
+	ackSendC       map[int32]chan *datapb.Ack
+	ackSendCMu     sync.RWMutex
 	subC           map[int32]chan *datapb.Record
 	subCMu         sync.RWMutex
 
 	storage *storage.Storage
+
+	wait   map[int64]chan *datapb.Ack
+	waitMu sync.RWMutex
 }
 
 func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr string) *DataServer {
@@ -55,8 +59,9 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		viewID:           0,
 		batchingInterval: batchingInterval,
 	}
-	server.ackC = make(map[int32]chan *datapb.Ack)
+	server.ackSendC = make(map[int32]chan *datapb.Ack)
 	server.subC = make(map[int32]chan *datapb.Record)
+	server.ackC = make(chan *datapb.Ack)
 	server.appendC = make(chan *datapb.Record)
 	server.replicateC = make(chan *datapb.Record)
 	server.replicateSendC = make([]chan *datapb.Record, numReplica)
@@ -131,6 +136,7 @@ func (server *DataServer) UpdatePeers(peers string) error {
 func (server *DataServer) Start() {
 	go server.processAppend()
 	go server.processReplicate()
+	go server.processAck()
 }
 
 func (server *DataServer) connectToPeers(peer int32) error {
@@ -184,27 +190,55 @@ func (server *DataServer) replicateRecords(done <-chan interface{}, ch chan *dat
 
 // processAppend sends records to replicateC and replicates them to peers
 func (server *DataServer) processAppend() {
-	for {
-		select {
-		case record := <-server.appendC:
-			record.LocalReplicaID = server.replicaID
-			server.replicateC <- record
-			for _, c := range server.replicateSendC {
-				c <- record
-			}
+	for record := range server.appendC {
+		record.LocalReplicaID = server.replicaID
+		server.replicateC <- record
+		for _, c := range server.replicateSendC {
+			c <- record
 		}
 	}
 }
 
 // processReplicate writes records to local storage
 func (server *DataServer) processReplicate() {
-	for {
-		select {
-		case record := <-server.replicateC:
-			_, err := server.storage.WriteToPartition(record.LocalReplicaID, record.Record)
-			if err != nil {
-				log.Fatalf("Write to storage failed: %v", err)
-			}
+	for record := range server.replicateC {
+		_, err := server.storage.WriteToPartition(record.LocalReplicaID, record.Record)
+		if err != nil {
+			log.Fatalf("Write to storage failed: %v", err)
 		}
+	}
+}
+
+func (server *DataServer) processAck() {
+	for ack := range server.ackC {
+		// send to ack channel
+		server.ackSendCMu.RLock()
+		c := server.ackSendC[ack.ClientID]
+		server.ackSendCMu.RUnlock()
+		c <- ack
+		// send individual ack message if requested to block
+		id := int64(ack.ClientID)<<32 + int64(ack.ClientSN)
+		server.waitMu.RLock()
+		c, ok := server.wait[id]
+		server.waitMu.RUnlock()
+		if ok {
+			c <- ack
+			break
+		}
+	}
+}
+
+func (server *DataServer) WaitForAck(cid, csn int32) *datapb.Ack {
+	id := int64(cid)<<32 + int64(csn)
+	ackC := make(chan *datapb.Ack)
+	server.waitMu.Lock()
+	server.wait[id] = ackC
+	server.waitMu.Unlock()
+	select {
+	case ack := <-ackC:
+		server.waitMu.Lock()
+		delete(server.wait, id)
+		server.waitMu.Unlock()
+		return ack
 	}
 }
