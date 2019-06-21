@@ -35,6 +35,12 @@ func (server *DataServer) Append(stream datapb.Data_AppendServer) error {
 	}
 }
 
+func (server *DataServer) AppendOne(ctx context.Context, record *datapb.Record) (*datapb.Ack, error) {
+	server.appendC <- record
+	// TODO
+	return &datapb.Ack{}, nil
+}
+
 func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream datapb.Data_AppendServer) {
 	ackC := make(chan *datapb.Ack)
 	server.ackCMu.Lock()
