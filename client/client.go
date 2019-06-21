@@ -203,6 +203,32 @@ func (c *Client) Append(record string) (int32, int32, error) {
 	return 0, 0, nil
 }
 
+func (c *Client) AppendOne(record string) (int32, int32, error) {
+	r := &datapb.Record{
+		ClientID: c.clientID,
+		ClientSN: c.getNextClientSN(),
+		Record:   record,
+	}
+	conn, err := c.getDataServerConn(shard, replica)
+	if err != nil {
+		return 0, 0, err
+	}
+	callOpts := []grpc.CallOption{}
+	dataClient := datapb.NewDataClient(conn)
+	ack, err := dataClient.AppendOne(context.TODO(), r, opts...)
+	if err != nil {
+		return 0, 0, err
+	}
+	if !succeeded {
+		return 0, 0, fmt.Errorf("append failed")
+	}
+	return ack.GlobalSN, ack.shardID, nil
+}
+
+func (c *Client) Read(gsn, shard int32) (string, error) {
+	return "", nil
+}
+
 func (c *Client) SetShardingPolicy(p ShardingPolicy) {
 	c.shardingPolicy = p
 }

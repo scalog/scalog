@@ -5,6 +5,7 @@ package datapb;
 service Data {
 	// clients set shardID to -1
 	rpc Append(stream Record) returns (stream Ack) {}
+	rpc AppendOne(Record) returns (Ack) {}
 	// replicas set proper shardID and localReplicaID
 	rpc Replicate(stream Record) returns (Empty) {}
 	// the servers don't need to know the sources of the following requests
