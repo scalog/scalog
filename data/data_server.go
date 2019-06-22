@@ -255,7 +255,7 @@ func (server *DataServer) processCommittedEntry() {
 				if rid < startReplicaID {
 					diff := lsn
 					if l, ok := server.prevCommittedCut.Cut[rid]; ok {
-						diff := lsn - l
+						diff = lsn - l
 					}
 					if diff > 0 {
 						startGSN += int64(diff)
@@ -266,11 +266,11 @@ func (server *DataServer) processCommittedEntry() {
 			for i := int32(0); i < server.numReplica; i++ {
 				rid := startReplicaID + i
 				lsn := entry.CommittedCut.Cut[rid]
-				diff := lsn
+				diff := int32(lsn)
 				start := int64(0)
 				if l, ok := server.prevCommittedCut.Cut[rid]; ok {
 					start = l
-					diff := lsn - l
+					diff = int32(lsn - l)
 				}
 				if diff > 0 {
 					server.storage.Assign(i+startReplicaID, start, diff, startGSN)
