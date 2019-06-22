@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/scalog/scalog/discovery/discpb"
 	log "github.com/scalog/scalog/logger"
@@ -38,9 +39,16 @@ func NewDiscoveryServer(numReplica int32, orderAddr string) *DiscoveryServer {
 		clientID:   0,
 		viewC:      make(map[int32]chan *discpb.View),
 	}
-	err := ds.UpdateOrderAddr(orderAddr)
+	var err error
+	for i := 0; i < 10; i++ {
+		err = ds.UpdateOrderAddr(orderAddr)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if err != nil {
-		log.Fatalf("Connect to ordering layer %v failed: %v", orderAddr, err)
+		return nil
 	}
 	return ds
 }
@@ -72,8 +80,7 @@ func (server *DiscoveryServer) subscribe() {
 	for {
 		entry, err := (*server.orderClient).Recv()
 		if err != nil {
-			log.Errorf("%v", err)
-			continue
+			log.Fatalf("%v", err)
 		}
 		// check if there is any update on view
 		server.viewMu.Lock()
@@ -101,26 +108,31 @@ func (server *DiscoveryServer) subscribe() {
 			}
 		}
 		server.viewMu.Unlock()
-		// construct view in the format of discpb messages
-		view := &discpb.View{ViewID: server.viewID}
-		liveShards := make([]int32, 0)
-		finalizedShards := make([]int32, 0)
-		server.viewMu.Lock()
-		for s, o := range server.shards {
-			if o {
-				liveShards = append(liveShards, s)
-			} else {
-				finalizedShards = append(finalizedShards, s)
-			}
-		}
-		server.viewMu.Unlock()
-		view.LiveShards = liveShards
-		view.FinalizedShards = finalizedShards
-		// send the view to clients
+		// get view in discpb.View format
+		view := server.getView()
+		// send the view through viewC channels
 		server.viewCMu.Lock()
 		for _, vc := range server.viewC {
 			vc <- view
 		}
 		server.viewCMu.Unlock()
 	}
+}
+
+func (server *DiscoveryServer) getView() *discpb.View {
+	view := &discpb.View{ViewID: server.viewID}
+	liveShards := make([]int32, 0)
+	finalizedShards := make([]int32, 0)
+	server.viewMu.Lock()
+	for s, o := range server.shards {
+		if o {
+			liveShards = append(liveShards, s)
+		} else {
+			finalizedShards = append(finalizedShards, s)
+		}
+	}
+	server.viewMu.Unlock()
+	view.LiveShards = liveShards
+	view.FinalizedShards = finalizedShards
+	return view
 }

@@ -8,7 +8,6 @@ import (
 )
 
 func (server *DiscoveryServer) Discover(empty *discpb.Empty, stream discpb.Discovery_DiscoverServer) error {
-	// size of 10 is enough as view is not changed frequently
 	viewC := make(chan *discpb.View, 4096)
 	server.viewCMu.Lock()
 	cid := server.clientID
@@ -23,6 +22,15 @@ func (server *DiscoveryServer) Discover(empty *discpb.Empty, stream discpb.Disco
 		server.viewCMu.Unlock()
 	}()
 	// send new views to the client
+	v := server.getView()
+	err := stream.Send(v)
+	if err != nil {
+		if err == io.EOF {
+			return nil
+		}
+		log.Warningf("%v", err)
+		return err
+	}
 	for v := range viewC {
 		err := stream.Send(v)
 		if err != nil {

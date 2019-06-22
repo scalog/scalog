@@ -55,6 +55,10 @@ type DataServer struct {
 	waitMu sync.RWMutex
 
 	committedEntryC chan *orderpb.CommittedEntry
+
+	// stores records directly sent to this replica
+	records   map[int64]*datapb.Record
+	recordsMu sync.Mutex
 }
 
 func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr string) *DataServer {
@@ -64,12 +68,21 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		shardID:          shardID,
 		clientID:         0,
 		viewID:           0,
+		numReplica:       numReplica,
 		batchingInterval: batchingInterval,
 	}
 	server.localCut = make([]int64, numReplica)
 	for i := 0; i < int(numReplica); i++ {
 		server.localCut[i] = 0
 	}
+	// check if the number of peers matches that in the configuration
+	ps := strings.Split(peers, ",")
+	if int32(len(ps)) != server.numReplica {
+		log.Errorf("the number of peers in peer list doesn't match the number of replicas: %v vs %v", len(ps), numReplica)
+		return nil
+	}
+	server.peers = ps
+	// initialize basic data structures
 	server.committedEntryC = make(chan *orderpb.CommittedEntry, 4096)
 	server.ackSendC = make(map[int32]chan *datapb.Ack)
 	server.subC = make(map[int32]chan *datapb.Record)
@@ -78,6 +91,9 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	server.replicateC = make(chan *datapb.Record, 4096)
 	server.replicateSendC = make([]chan *datapb.Record, numReplica)
 	server.peerDoneC = make([]chan interface{}, numReplica)
+	server.wait = make(map[int64]chan *datapb.Ack)
+	server.prevCommittedCut = &orderpb.CommittedCut{}
+	server.records = make(map[int64]*datapb.Record)
 	path := fmt.Sprintf("storage-%v-%v", shardID, replicaID) // TODO configure path
 	segLen := int32(1000)                                    // TODO configurable segment length
 	storage, err := storage.NewStorage(path, replicaID, numReplica, segLen)
@@ -86,7 +102,9 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	}
 	server.storage = storage
 	for i := int32(0); i < numReplica; i++ {
-		server.replicateSendC[i] = make(chan *datapb.Record, 4096)
+		if i != replicaID {
+			server.replicateSendC[i] = make(chan *datapb.Record, 4096)
+		}
 	}
 	for i := 0; i < 10; i++ {
 		err = server.UpdateOrderAddr(orderAddr)
@@ -99,7 +117,6 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		log.Errorf("%v", err)
 		return nil
 	}
-	server.UpdatePeers(peers)
 	return server
 }
 
@@ -128,34 +145,29 @@ func (server *DataServer) UpdateOrderAddr(addr string) error {
 // UpdatePeers updates the peer list of the shard. It should be called only at
 // the initialization phase of the server.
 // TODO make the list updatable when running
-func (server *DataServer) UpdatePeers(peers string) error {
-	// check if the number of peers matches that in the configuration
-	ps := strings.Split(peers, ",")
-	if int32(len(ps)) != server.numReplica {
-		return fmt.Errorf("the number of peers in peer list doesn't match the number of replicas: %v vs %v", len(ps), server.numReplica)
-	}
+func (server *DataServer) ConnPeers() error {
 	// create connections with peers
-	server.peers = ps
 	server.peerConns = make([]*grpc.ClientConn, server.numReplica)
 	server.peerClients = make([]*datapb.Data_ReplicateClient, server.numReplica)
 	for i := int32(0); i < server.numReplica; i++ {
-		err := server.connectToPeers(i)
-		if err != nil {
-			log.Errorf("%v", err)
-			continue
+		if i != server.replicaID {
+			err := server.connectToPeer(i)
+			if err != nil {
+				log.Errorf("%v", err)
+				continue
+			}
+			done := make(chan interface{})
+			sendC := server.replicateSendC[i]
+			client := server.peerClients[i]
+			server.peerDoneC[i] = done
+			go server.replicateRecords(done, sendC, client)
 		}
-		done := make(chan interface{})
-		server.peerMu.Lock()
-		sendC := server.replicateSendC[i]
-		client := server.peerClients[i]
-		server.peerDoneC[i] = done
-		server.peerMu.Unlock()
-		go server.replicateRecords(done, sendC, client)
 	}
 	return nil
 }
 
 func (server *DataServer) Start() {
+	server.ConnPeers()
 	go server.processAppend()
 	go server.processReplicate()
 	go server.processAck()
@@ -164,9 +176,7 @@ func (server *DataServer) Start() {
 	go server.receiveCommittedCut()
 }
 
-func (server *DataServer) connectToPeers(peer int32) error {
-	server.peerMu.Lock()
-	defer server.peerMu.Unlock()
+func (server *DataServer) connectToPeer(peer int32) error {
 	// do not connect to the node itself
 	if peer == server.replicaID {
 		return nil
@@ -178,11 +188,19 @@ func (server *DataServer) connectToPeers(peer int32) error {
 	}
 	if server.peerDoneC[peer] != nil {
 		close(server.peerDoneC[peer])
-		server.peerDoneC = nil
+		server.peerDoneC[peer] = nil
 	}
 	// build connections to peers
 	opts := []grpc.DialOption{grpc.WithInsecure()}
-	conn, err := grpc.Dial(server.peers[peer], opts...)
+	var conn *grpc.ClientConn
+	var err error
+	for i := 0; i < 10; i++ {
+		conn, err = grpc.Dial(server.peers[peer], opts...)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if err != nil {
 		return fmt.Errorf("Dial peer %v failed: %v", server.peers[peer], err)
 	}
@@ -191,9 +209,6 @@ func (server *DataServer) connectToPeers(peer int32) error {
 	replicateSendClient, err := dataClient.Replicate(context.Background())
 	if err != nil {
 		return fmt.Errorf("Create replicate client to %v failed: %v", server.peers[peer], err)
-	}
-	if server.peerConns[peer] != nil {
-		server.peerConns[peer].Close()
 	}
 	server.peerClients[peer] = &replicateSendClient
 	return nil
@@ -217,6 +232,7 @@ func (server *DataServer) replicateRecords(done <-chan interface{}, ch chan *dat
 func (server *DataServer) processAppend() {
 	for record := range server.appendC {
 		record.LocalReplicaID = server.replicaID
+		record.ShardID = server.shardID
 		server.replicateC <- record
 		for i, c := range server.replicateSendC {
 			if int32(i) != server.replicaID {
@@ -233,8 +249,11 @@ func (server *DataServer) processReplicate() {
 		if err != nil {
 			log.Fatalf("Write to storage failed: %v", err)
 		}
+		server.recordsMu.Lock()
+		server.records[lsn] = record
+		server.recordsMu.Unlock()
 		server.localCutMu.Lock()
-		server.localCut[record.LocalReplicaID] = lsn
+		server.localCut[record.LocalReplicaID] = lsn + 1
 		server.localCutMu.Unlock()
 	}
 }
@@ -243,23 +262,24 @@ func (server *DataServer) processAck() {
 	for ack := range server.ackC {
 		// send to ack channel
 		server.ackSendCMu.RLock()
-		c := server.ackSendC[ack.ClientID]
+		c, ok := server.ackSendC[ack.ClientID]
 		server.ackSendCMu.RUnlock()
-		c <- ack
+		if ok {
+			c <- ack
+		}
 		// send individual ack message if requested to block
 		id := int64(ack.ClientID)<<32 + int64(ack.ClientSN)
 		server.waitMu.RLock()
-		c, ok := server.wait[id]
+		c, ok = server.wait[id]
 		server.waitMu.RUnlock()
 		if ok {
 			c <- ack
-			break
 		}
 	}
 }
 
 func (server *DataServer) reportLocalCut() {
-	tick := time.NewTicker(time.Millisecond)
+	tick := time.NewTicker(server.batchingInterval)
 	for {
 		select {
 		case <-tick.C:
@@ -285,7 +305,7 @@ func (server *DataServer) receiveCommittedCut() {
 			return
 		}
 		if err != nil {
-			log.Errorf("Receive from ordering layer error: %v", err)
+			log.Fatalf("Receive from ordering layer error: %v", err)
 		}
 		server.committedEntryC <- e
 	}
@@ -320,8 +340,34 @@ func (server *DataServer) processCommittedEntry() {
 					diff = int32(lsn - l)
 				}
 				if diff > 0 {
-					server.storage.Assign(i+startReplicaID, start, diff, startGSN)
+					err := server.storage.Assign(i, start, diff, startGSN)
+					if err != nil {
+						log.Errorf("Assign GSN to storage error: %v", err)
+						continue
+					}
 					startGSN += int64(diff)
+					if i == server.replicaID {
+						for j := int32(0); j < diff; j++ {
+							server.recordsMu.Lock()
+							record, ok := server.records[start+int64(j)]
+							if ok {
+								delete(server.records, start+int64(j))
+							}
+							server.recordsMu.Unlock()
+							if !ok {
+								continue
+							}
+							ack := &datapb.Ack{
+								ClientID:       record.ClientID,
+								ClientSN:       record.ClientSN,
+								ShardID:        server.shardID,
+								LocalReplicaID: server.replicaID,
+								ViewID:         server.viewID,
+								GlobalSN:       startGSN + int64(j),
+							}
+							server.ackC <- ack
+						}
+					}
 				}
 			}
 			// replace previous committed cut

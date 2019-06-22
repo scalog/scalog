@@ -3,6 +3,7 @@ package order
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/scalog/scalog/order/orderpb"
@@ -15,6 +16,7 @@ type OrderServer struct {
 	clientID         int32
 	batchingInterval time.Duration
 	isLeader         bool
+	viewID           int32          // use sync/atomic to access viewID
 	shards           map[int32]bool // true for live shards, false for finalized ones
 	forwardC         chan *orderpb.LocalCuts
 	proposeC         chan *orderpb.CommittedEntry
@@ -29,6 +31,7 @@ func NewOrderServer(index, numReplica, dataNumReplica int32, batchingInterval ti
 		index:            index,
 		numReplica:       numReplica,
 		dataNumReplica:   dataNumReplica,
+		viewID:           0,
 		isLeader:         index == 0,
 		batchingInterval: batchingInterval,
 	}
@@ -59,9 +62,11 @@ func (s *OrderServer) runReplication() {
 }
 
 func (s *OrderServer) computeCommittedCut(lcs map[int32]*orderpb.LocalCut) map[int32]int64 {
+	incrViewID := false
 	// add new live shards
 	for shard := range lcs {
 		if _, ok := s.shards[shard]; !ok {
+			incrViewID = true
 			s.shards[shard] = true
 		}
 	}
@@ -69,6 +74,7 @@ func (s *OrderServer) computeCommittedCut(lcs map[int32]*orderpb.LocalCut) map[i
 	for shard, status := range s.shards {
 		// check if the shard is finialized
 		if !status {
+			incrViewID = true
 			// clean finalized shards from lcs
 			delete(lcs, shard)
 			continue
@@ -82,6 +88,9 @@ func (s *OrderServer) computeCommittedCut(lcs map[int32]*orderpb.LocalCut) map[i
 			}
 		}
 		ccut[shard] = min
+	}
+	if incrViewID {
+		atomic.AddInt32(&s.viewID, 1)
 	}
 	return ccut
 }
@@ -116,7 +125,8 @@ func (s *OrderServer) processReport() {
 			// TODO: check to make sure the key in lcs exist
 			if s.isLeader { // compute committedCut
 				ccut := s.computeCommittedCut(lcs)
-				ce := &orderpb.CommittedEntry{Seq: 0, ViewID: 0, CommittedCut: &orderpb.CommittedCut{StartGSN: 0, Cut: ccut}, FinalizeShards: nil}
+				vid := atomic.LoadInt32(&s.viewID)
+				ce := &orderpb.CommittedEntry{Seq: 0, ViewID: vid, CommittedCut: &orderpb.CommittedCut{StartGSN: 0, Cut: ccut}, FinalizeShards: nil}
 				s.proposeC <- ce
 			}
 		}

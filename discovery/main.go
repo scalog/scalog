@@ -50,6 +50,9 @@ func Start() {
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 	// order server
 	server := NewDiscoveryServer(numReplica, orderAddr)
+	if server == nil {
+		log.Fatalf("Failed to create discovery server")
+	}
 	discpb.RegisterDiscoveryServer(grpcServer, server)
 	server.Start()
 	// serve grpc server

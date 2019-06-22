@@ -46,22 +46,19 @@ func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream 
 	server.ackSendCMu.Lock()
 	server.ackSendC[cid] = ackSendC
 	server.ackSendCMu.Unlock()
+	defer func() {
+		server.ackSendCMu.Lock()
+		delete(server.ackSendC, cid)
+		server.ackSendCMu.Unlock()
+		log.Infof("Client %v is closed", cid)
+		close(ackSendC)
+	}()
 	for {
 		select {
 		case <-done:
-			server.ackSendCMu.Lock()
-			delete(server.ackSendC, cid)
-			server.ackSendCMu.Unlock()
-			log.Infof("Client %v is closed", cid)
-			close(ackSendC)
 			return
 		case ack := <-ackSendC:
 			if err := stream.Send(ack); err != nil {
-				server.ackSendCMu.Lock()
-				delete(server.ackSendC, cid)
-				server.ackSendCMu.Unlock()
-				log.Infof("Client %v is closed", cid)
-				close(ackSendC)
 				close(done)
 				return
 			}
@@ -71,17 +68,14 @@ func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream 
 
 func (server *DataServer) Replicate(stream datapb.Data_ReplicateServer) error {
 	for {
-		select {
-		default:
-			record, err := stream.Recv()
-			if err != nil {
-				if err == io.EOF {
-					return nil
-				}
-				return err
+		record, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return nil
 			}
-			server.replicateC <- record
+			return err
 		}
+		server.replicateC <- record
 	}
 }
 

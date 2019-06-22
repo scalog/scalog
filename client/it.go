@@ -17,7 +17,7 @@ type It struct {
 func NewIt() (*It, error) {
 	discAddr := viper.GetString("discovery-addr")
 	numReplica := int32(viper.GetInt("data-replication-factor"))
-	client, err := NewClient(discAddr, numReplica)
+	client, err := NewLocalClient(discAddr, numReplica)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (it *It) Start() error {
 				continue
 			}
 			record := strings.Join(cmd[1:], " ")
-			gsn, shard, err := it.client.Append(record)
+			gsn, shard, err := it.client.AppendOne(record)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				continue

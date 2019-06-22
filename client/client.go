@@ -65,16 +65,29 @@ func NewClient(discAddr string, numReplica int32) (*Client, error) {
 	c.appendC = make(chan *datapb.Record, 4096)
 	c.ackC = make(chan *datapb.Ack, 4096)
 	c.subC = make(chan *datapb.Record, 4096)
+	c.dataConn = make(map[int32]*grpc.ClientConn)
+	c.view = disc.NewView()
 	err := c.UpdateDiscovery(discAddr)
 	if err != nil {
 		return nil, err
 	}
+	go c.subscribeView()
 	return c, nil
 }
 
 func generateClientID() int32 {
 	seed := rand.NewSource(time.Now().UnixNano())
 	return rand.New(seed).Int31()
+}
+
+func (c *Client) subscribeView() {
+	for {
+		v, err := (*c.discClient).Recv()
+		if err != nil {
+			panic(err)
+		}
+		c.view.Update(v)
+	}
 }
 
 func (c *Client) UpdateDiscovery(addr string) error {
@@ -101,6 +114,7 @@ func (c *Client) UpdateDiscovery(addr string) error {
 	return nil
 }
 
+// the caller is responsible to lock the data
 func (c *Client) connDataServer(shard, replica int32) (*grpc.ClientConn, error) {
 	globalReplicaID := shard*c.numReplica + replica
 	var addr string
@@ -109,8 +123,6 @@ func (c *Client) connDataServer(shard, replica int32) (*grpc.ClientConn, error) 
 	} else {
 		// TODO request kubedns for replica address
 	}
-	c.dataMu.Lock()
-	defer c.dataMu.Unlock()
 	if conn, ok := c.dataConn[globalReplicaID]; ok && conn != nil {
 		c.dataConn[globalReplicaID].Close()
 		delete(c.dataConn, globalReplicaID)
@@ -118,7 +130,7 @@ func (c *Client) connDataServer(shard, replica int32) (*grpc.ClientConn, error) 
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("Dial dataovery at %v failed: %v", addr, err)
+		return nil, fmt.Errorf("Dial data server at %v failed: %v", addr, err)
 	}
 	c.dataConn[globalReplicaID] = conn
 	return conn, nil
@@ -210,12 +222,14 @@ func (c *Client) AppendOne(record string) (int64, int32, error) {
 		Record:   record,
 	}
 	shard, replica := c.shardingPolicy(c.view, record)
+	fmt.Printf("shard: %v, replica: %v\n", shard, replica)
 	conn, err := c.getDataServerConn(shard, replica)
 	if err != nil {
 		return 0, 0, err
 	}
 	opts := []grpc.CallOption{}
 	dataClient := datapb.NewDataClient(conn)
+	fmt.Println(r)
 	ack, err := dataClient.AppendOne(context.TODO(), r, opts...)
 	if err != nil {
 		return 0, 0, err
