@@ -63,6 +63,9 @@ func Start() {
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 	// data server
 	server := NewDataServer(rid, sid, numReplica, batchingInterval, peers, orderAddr)
+	if server == nil {
+		log.Fatalf("Failed to create data server")
+	}
 	datapb.RegisterDataServer(grpcServer, server)
 	server.Start()
 	// serve grpc server

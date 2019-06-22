@@ -58,6 +58,7 @@ type DataServer struct {
 }
 
 func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr string) *DataServer {
+	var err error
 	server := &DataServer{
 		replicaID:        replicaID,
 		shardID:          shardID,
@@ -87,7 +88,17 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	for i := int32(0); i < numReplica; i++ {
 		server.replicateSendC[i] = make(chan *datapb.Record, 4096)
 	}
-	server.UpdateOrderAddr(orderAddr)
+	for i := 0; i < 10; i++ {
+		err = server.UpdateOrderAddr(orderAddr)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err != nil {
+		log.Errorf("%v", err)
+		return nil
+	}
 	server.UpdatePeers(peers)
 	return server
 }
@@ -254,9 +265,12 @@ func (server *DataServer) reportLocalCut() {
 		case <-tick.C:
 			lcs := &orderpb.LocalCuts{}
 			lcs.Cuts = make([]*orderpb.LocalCut, 1)
-			lcs.Cuts[0].ShardID = server.shardID
-			lcs.Cuts[0].LocalReplicaID = server.replicaID
+			lcs.Cuts[0] = &orderpb.LocalCut{
+				ShardID:        server.shardID,
+				LocalReplicaID: server.replicaID,
+			}
 			server.localCutMu.Lock()
+			lcs.Cuts[0].Cut = make([]int64, len(server.localCut))
 			copy(lcs.Cuts[0].Cut, server.localCut)
 			server.localCutMu.Unlock()
 			(*server.orderClient).Send(lcs)
