@@ -61,10 +61,10 @@ func NewClient(discAddr string, numReplica int32) (*Client, error) {
 		localRun:   false,
 	}
 	c.shardingPolicy = NewDefaultShardingPolicy(numReplica).Shard
-	c.viewC = make(chan *discpb.View)
-	c.appendC = make(chan *datapb.Record)
-	c.ackC = make(chan *datapb.Ack)
-	c.subC = make(chan *datapb.Record)
+	c.viewC = make(chan *discpb.View, 4096)
+	c.appendC = make(chan *datapb.Record, 4096)
+	c.ackC = make(chan *datapb.Ack, 4096)
+	c.subC = make(chan *datapb.Record, 4096)
 	err := c.UpdateDiscovery(discAddr)
 	if err != nil {
 		return nil, err

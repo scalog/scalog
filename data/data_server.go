@@ -69,12 +69,12 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	for i := 0; i < int(numReplica); i++ {
 		server.localCut[i] = 0
 	}
-	server.committedEntryC = make(chan *orderpb.CommittedEntry)
+	server.committedEntryC = make(chan *orderpb.CommittedEntry, 4096)
 	server.ackSendC = make(map[int32]chan *datapb.Ack)
 	server.subC = make(map[int32]chan *datapb.Record)
-	server.ackC = make(chan *datapb.Ack)
-	server.appendC = make(chan *datapb.Record)
-	server.replicateC = make(chan *datapb.Record)
+	server.ackC = make(chan *datapb.Ack, 4096)
+	server.appendC = make(chan *datapb.Record, 4096)
+	server.replicateC = make(chan *datapb.Record, 4096)
 	server.replicateSendC = make([]chan *datapb.Record, numReplica)
 	server.peerDoneC = make([]chan interface{}, numReplica)
 	path := fmt.Sprintf("storage-%v-%v", shardID, replicaID) // TODO configure path
@@ -85,7 +85,7 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	}
 	server.storage = storage
 	for i := int32(0); i < numReplica; i++ {
-		server.replicateSendC[i] = make(chan *datapb.Record)
+		server.replicateSendC[i] = make(chan *datapb.Record, 4096)
 	}
 	server.UpdateOrderAddr(orderAddr)
 	server.UpdatePeers(peers)
@@ -320,7 +320,7 @@ func (server *DataServer) processCommittedEntry() {
 
 func (server *DataServer) WaitForAck(cid, csn int32) *datapb.Ack {
 	id := int64(cid)<<32 + int64(csn)
-	ackC := make(chan *datapb.Ack)
+	ackC := make(chan *datapb.Ack, 4096)
 	server.waitMu.Lock()
 	server.wait[id] = ackC
 	server.waitMu.Unlock()

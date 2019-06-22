@@ -33,10 +33,10 @@ func NewOrderServer(index, numReplica, dataNumReplica int32, batchingInterval ti
 		batchingInterval: batchingInterval,
 	}
 	s.shards = make(map[int32]bool)
-	s.forwardC = make(chan *orderpb.LocalCuts)
-	s.proposeC = make(chan *orderpb.CommittedEntry)
-	s.commitC = make(chan *orderpb.CommittedEntry)
-	s.finalizeC = make(chan *orderpb.FinalizeEntry)
+	s.forwardC = make(chan *orderpb.LocalCuts, 4096)
+	s.proposeC = make(chan *orderpb.CommittedEntry, 4096)
+	s.commitC = make(chan *orderpb.CommittedEntry, 4096)
+	s.finalizeC = make(chan *orderpb.FinalizeEntry, 4096)
 	s.subC = make(map[int32]chan *orderpb.CommittedEntry)
 	return s
 }

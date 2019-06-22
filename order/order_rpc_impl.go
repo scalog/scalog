@@ -30,7 +30,7 @@ func (server *OrderServer) Report(stream orderpb.Order_ReportServer) error {
 }
 
 func (server *OrderServer) respondToDataReplica(done chan struct{}, stream orderpb.Order_ReportServer) {
-	respC := make(chan *orderpb.CommittedEntry)
+	respC := make(chan *orderpb.CommittedEntry, 4096)
 	server.subCMu.Lock()
 	cid := server.clientID
 	server.clientID++

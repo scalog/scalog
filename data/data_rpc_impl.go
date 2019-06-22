@@ -42,7 +42,7 @@ func (server *DataServer) AppendOne(ctx context.Context, record *datapb.Record) 
 }
 
 func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream datapb.Data_AppendServer) {
-	ackSendC := make(chan *datapb.Ack)
+	ackSendC := make(chan *datapb.Ack, 4096)
 	server.ackSendCMu.Lock()
 	server.ackSendC[cid] = ackSendC
 	server.ackSendCMu.Unlock()
@@ -106,7 +106,7 @@ func (server *DataServer) Read(ctx context.Context, gsn *datapb.GlobalSN) (*data
 }
 
 func (server *DataServer) Subscribe(gsn *datapb.GlobalSN, stream datapb.Data_SubscribeServer) error {
-	subC := make(chan *datapb.Record)
+	subC := make(chan *datapb.Record, 4096)
 	server.subCMu.Lock()
 	cid := server.clientID
 	server.clientID++

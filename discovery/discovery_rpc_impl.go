@@ -9,7 +9,7 @@ import (
 
 func (server *DiscoveryServer) Discover(empty *discpb.Empty, stream discpb.Discovery_DiscoverServer) error {
 	// size of 10 is enough as view is not changed frequently
-	viewC := make(chan *discpb.View, 10)
+	viewC := make(chan *discpb.View, 4096)
 	server.viewCMu.Lock()
 	cid := server.clientID
 	server.viewC[cid] = viewC
