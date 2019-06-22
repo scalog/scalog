@@ -220,9 +220,6 @@ func (c *Client) AppendOne(record string) (int64, int32, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	if !ack.Succeeded {
-		return 0, 0, fmt.Errorf("append failed")
-	}
 	return ack.GlobalSN, ack.ShardID, nil
 }
 
