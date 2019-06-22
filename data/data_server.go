@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -148,6 +149,8 @@ func (server *DataServer) Start() {
 	go server.processReplicate()
 	go server.processAck()
 	go server.processCommittedEntry()
+	go server.reportLocalCut()
+	go server.receiveCommittedCut()
 }
 
 func (server *DataServer) connectToPeers(peer int32) error {
@@ -241,6 +244,36 @@ func (server *DataServer) processAck() {
 			c <- ack
 			break
 		}
+	}
+}
+
+func (server *DataServer) reportLocalCut() {
+	tick := time.NewTicker(time.Millisecond)
+	for {
+		select {
+		case <-tick.C:
+			lcs := &orderpb.LocalCuts{}
+			lcs.Cuts = make([]*orderpb.LocalCut, 1)
+			lcs.Cuts[0].ShardID = server.shardID
+			lcs.Cuts[0].LocalReplicaID = server.replicaID
+			server.localCutMu.Lock()
+			copy(lcs.Cuts[0].Cut, server.localCut)
+			server.localCutMu.Unlock()
+			(*server.orderClient).Send(lcs)
+		}
+	}
+}
+
+func (server *DataServer) receiveCommittedCut() {
+	for {
+		e, err := (*server.orderClient).Recv()
+		if err == io.EOF {
+			return
+		}
+		if err != nil {
+			log.Errorf("Receive from ordering layer error: %v", err)
+		}
+		server.committedEntryC <- e
 	}
 }
 
