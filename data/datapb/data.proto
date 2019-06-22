@@ -31,7 +31,6 @@ message Ack {
 	int32 localReplicaID = 4;
 	int32 viewID = 5;
 	int64 globalSN = 6; // global sequence number
-	bool succeeded = 7;
 }
 
 message GlobalSN {
