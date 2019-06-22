@@ -19,7 +19,7 @@ message LocalCuts {
 }
 
 message CommittedCut {
-	int32 startGSN = 1;
+	int64 startGSN = 1;
 	// from globalReplicaID to each cut entry
 	// globalReplicaID = shardID * numReplicas + localReplicaID
 	map<int32, int64> cut = 2;

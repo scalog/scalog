@@ -22,8 +22,11 @@ type DataServer struct {
 	numReplica       int32
 	batchingInterval time.Duration
 	// server state
-	clientID int32 // incremental counter to distinguish clients
-	viewID   int32
+	clientID         int32 // incremental counter to distinguish clients
+	viewID           int32
+	localCut         []int64
+	localCutMu       sync.Mutex
+	prevCommittedCut *orderpb.CommittedCut
 	// ordering layer information
 	orderAddr   string
 	orderConn   *grpc.ClientConn
@@ -49,6 +52,8 @@ type DataServer struct {
 
 	wait   map[int64]chan *datapb.Ack
 	waitMu sync.RWMutex
+
+	committedEntryC chan *orderpb.CommittedEntry
 }
 
 func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr string) *DataServer {
@@ -59,6 +64,11 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		viewID:           0,
 		batchingInterval: batchingInterval,
 	}
+	server.localCut = make([]int64, numReplica)
+	for i := 0; i < int(numReplica); i++ {
+		server.localCut[i] = 0
+	}
+	server.committedEntryC = make(chan *orderpb.CommittedEntry)
 	server.ackSendC = make(map[int32]chan *datapb.Ack)
 	server.subC = make(map[int32]chan *datapb.Record)
 	server.ackC = make(chan *datapb.Ack)
@@ -137,6 +147,7 @@ func (server *DataServer) Start() {
 	go server.processAppend()
 	go server.processReplicate()
 	go server.processAck()
+	go server.processCommittedEntry()
 }
 
 func (server *DataServer) connectToPeers(peer int32) error {
@@ -193,8 +204,10 @@ func (server *DataServer) processAppend() {
 	for record := range server.appendC {
 		record.LocalReplicaID = server.replicaID
 		server.replicateC <- record
-		for _, c := range server.replicateSendC {
-			c <- record
+		for i, c := range server.replicateSendC {
+			if int32(i) != server.replicaID {
+				c <- record
+			}
 		}
 	}
 }
@@ -202,10 +215,13 @@ func (server *DataServer) processAppend() {
 // processReplicate writes records to local storage
 func (server *DataServer) processReplicate() {
 	for record := range server.replicateC {
-		_, err := server.storage.WriteToPartition(record.LocalReplicaID, record.Record)
+		lsn, err := server.storage.WriteToPartition(record.LocalReplicaID, record.Record)
 		if err != nil {
 			log.Fatalf("Write to storage failed: %v", err)
 		}
+		server.localCutMu.Lock()
+		server.localCut[record.LocalReplicaID] = lsn
+		server.localCutMu.Unlock()
 	}
 }
 
@@ -224,6 +240,47 @@ func (server *DataServer) processAck() {
 		if ok {
 			c <- ack
 			break
+		}
+	}
+}
+
+func (server *DataServer) processCommittedEntry() {
+	for entry := range server.committedEntryC {
+		if entry.CommittedCut != nil {
+			startReplicaID := server.shardID * server.numReplica
+			startGSN := entry.CommittedCut.StartGSN
+			// compute startGSN using the number of records stored
+			// in shards with smaller ids
+			for rid, lsn := range entry.CommittedCut.Cut {
+				if rid < startReplicaID {
+					diff := lsn
+					if l, ok := server.prevCommittedCut.Cut[rid]; ok {
+						diff := lsn - l
+					}
+					if diff > 0 {
+						startGSN += int64(diff)
+					}
+				}
+			}
+			// assign gsn to records in my shard
+			for i := int32(0); i < server.numReplica; i++ {
+				rid := startReplicaID + i
+				lsn := entry.CommittedCut.Cut[rid]
+				diff := lsn
+				start := int64(0)
+				if l, ok := server.prevCommittedCut.Cut[rid]; ok {
+					start = l
+					diff := lsn - l
+				}
+				if diff > 0 {
+					server.storage.Assign(i+startReplicaID, start, diff, startGSN)
+					startGSN += int64(diff)
+				}
+			}
+			// replace previous committed cut
+			server.prevCommittedCut = entry.CommittedCut
+		}
+		if entry.FinalizeShards != nil {
 		}
 	}
 }
