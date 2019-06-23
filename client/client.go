@@ -36,8 +36,10 @@ type Client struct {
 	discClient *discpb.Discovery_DiscoverClient
 	discMu     sync.Mutex
 
-	dataConn map[int32]*grpc.ClientConn
-	dataMu   sync.Mutex
+	dataConn           map[int32]*grpc.ClientConn
+	dataConnMu         sync.Mutex
+	dataAppendClient   map[int32]*datapb.Data_AppendClient
+	dataAppendClientMu sync.Mutex
 
 	localRun bool
 }
@@ -66,6 +68,7 @@ func NewClient(discAddr string, numReplica int32) (*Client, error) {
 	c.ackC = make(chan *datapb.Ack, 4096)
 	c.subC = make(chan *datapb.Record, 4096)
 	c.dataConn = make(map[int32]*grpc.ClientConn)
+	c.dataAppendClient = make(map[int32]*datapb.Data_AppendClient)
 	c.view = disc.NewView()
 	err := c.UpdateDiscovery(discAddr)
 	if err != nil {
@@ -124,7 +127,7 @@ func (c *Client) connDataServer(shard, replica int32) (*grpc.ClientConn, error) 
 	var addr string
 	if c.localRun {
 		addr = fmt.Sprintf("127.0.0.1:%v", 23282+globalReplicaID)
-	} else {
+	} else { // nolint
 		// TODO request kubedns for replica address
 	}
 	if conn, ok := c.dataConn[globalReplicaID]; ok && conn != nil {
@@ -140,25 +143,39 @@ func (c *Client) connDataServer(shard, replica int32) (*grpc.ClientConn, error) 
 	return conn, nil
 }
 
+func (c *Client) getDataAppendClient(shard, replica int32) (*datapb.Data_AppendClient, error) {
+	globalReplicaID := shard*c.numReplica + replica
+	c.dataAppendClientMu.Lock()
+	defer c.dataAppendClientMu.Unlock()
+	if client, ok := c.dataAppendClient[globalReplicaID]; ok && client != nil {
+		return client, nil
+	}
+	return c.buildDataAppendClient(shard, replica)
+}
+
+func (c *Client) buildDataAppendClient(shard, replica int32) (*datapb.Data_AppendClient, error) {
+	globalReplicaID := shard*c.numReplica + replica
+	conn, err := c.getDataServerConn(shard, replica)
+	if err != nil {
+		return nil, err
+	}
+	dataClient := datapb.NewDataClient(conn)
+	dataAppendClient, err := dataClient.Append(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("Build data append client of shard %v replica %v failed: %v", shard, replica, err)
+	}
+	c.dataAppendClient[globalReplicaID] = &dataAppendClient
+	return &dataAppendClient, nil
+}
+
 func (c *Client) getDataServerConn(shard, replica int32) (*grpc.ClientConn, error) {
 	globalReplicaID := shard*c.numReplica + replica
-	c.dataMu.Lock()
-	defer c.dataMu.Unlock()
+	c.dataConnMu.Lock()
+	defer c.dataConnMu.Unlock()
 	if conn, ok := c.dataConn[globalReplicaID]; ok && conn != nil {
 		return conn, nil
 	}
 	return c.connDataServer(shard, replica)
-}
-
-func (c *Client) disconnDataServer(shard, replica int32) error {
-	globalReplicaID := shard*c.numReplica + replica
-	c.dataMu.Lock()
-	defer c.dataMu.Unlock()
-	if conn, ok := c.dataConn[globalReplicaID]; ok && conn != nil {
-		c.dataConn[globalReplicaID].Close()
-		delete(c.dataConn, globalReplicaID)
-	}
-	return nil
 }
 
 func (c *Client) Start() {
@@ -177,32 +194,22 @@ func (c *Client) processView() {
 }
 
 func (c *Client) processAppend() {
-	appendC := make(chan *datapb.Record)
 	for r := range c.appendC {
 		shard, replica := c.shardingPolicy(c.view, r.Record)
-		// TODO: implement this
-		c.doProcessAppend(appendC, shard, replica)
-	}
-}
-
-func (c *Client) doProcessAppend(appendC chan *datapb.Record, shard, replica int32) {
-	conn, err := c.getDataServerConn(shard, replica)
-	if err != nil {
-		// TODO handle the errors
-		log.Errorf("%v", err)
-		return
-	}
-	dataClient := datapb.NewDataClient(conn)
-	dataAppendClient, err := dataClient.Append(context.Background())
-	if err != nil {
-		log.Errorf("%v", err)
-		return
-	}
-	for r := range appendC {
-		err := dataAppendClient.Send(r)
+		r := &datapb.Record{
+			ClientID: c.clientID,
+			ClientSN: c.getNextClientSN(),
+			Record:   r.Record,
+		}
+		fmt.Printf("shard: %v, replica: %v\n", shard, replica)
+		client, err := c.getDataAppendClient(shard, replica)
 		if err != nil {
 			log.Errorf("%v", err)
-			return
+			continue
+		}
+		err = (*client).Send(r)
+		if err != nil {
+			log.Errorf("%v", err)
 		}
 	}
 }
