@@ -98,7 +98,7 @@ func (server *DiscoveryServer) subscribe() {
 		server.viewMu.Lock()
 		server.viewID = entry.ViewID
 		if entry.CommittedCut != nil {
-			for s, _ := range entry.CommittedCut.Cut {
+			for s := range entry.CommittedCut.Cut {
 				server.shards[s/server.numReplica] = true
 			}
 		}

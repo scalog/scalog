@@ -38,7 +38,6 @@ type DataServer struct {
 	peerConns   []*grpc.ClientConn
 	peerClients []*datapb.Data_ReplicateClient
 	peerDoneC   []chan interface{}
-	peerMu      sync.Mutex
 	// channels used to communate with clients, peers, and ordering layer
 	appendC        chan *datapb.Record
 	replicateC     chan *datapb.Record
@@ -167,7 +166,10 @@ func (server *DataServer) ConnPeers() error {
 }
 
 func (server *DataServer) Start() {
-	server.ConnPeers()
+	err := server.ConnPeers()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
 	go server.processAppend()
 	go server.processReplicate()
 	go server.processAck()
@@ -280,20 +282,20 @@ func (server *DataServer) processAck() {
 
 func (server *DataServer) reportLocalCut() {
 	tick := time.NewTicker(server.batchingInterval)
-	for {
-		select {
-		case <-tick.C:
-			lcs := &orderpb.LocalCuts{}
-			lcs.Cuts = make([]*orderpb.LocalCut, 1)
-			lcs.Cuts[0] = &orderpb.LocalCut{
-				ShardID:        server.shardID,
-				LocalReplicaID: server.replicaID,
-			}
-			server.localCutMu.Lock()
-			lcs.Cuts[0].Cut = make([]int64, len(server.localCut))
-			copy(lcs.Cuts[0].Cut, server.localCut)
-			server.localCutMu.Unlock()
-			(*server.orderClient).Send(lcs)
+	for range tick.C {
+		lcs := &orderpb.LocalCuts{}
+		lcs.Cuts = make([]*orderpb.LocalCut, 1)
+		lcs.Cuts[0] = &orderpb.LocalCut{
+			ShardID:        server.shardID,
+			LocalReplicaID: server.replicaID,
+		}
+		server.localCutMu.Lock()
+		lcs.Cuts[0].Cut = make([]int64, len(server.localCut))
+		copy(lcs.Cuts[0].Cut, server.localCut)
+		server.localCutMu.Unlock()
+		err := (*server.orderClient).Send(lcs)
+		if err != nil {
+			log.Errorf("%v", err)
 		}
 	}
 }
@@ -374,6 +376,7 @@ func (server *DataServer) processCommittedEntry() {
 			server.prevCommittedCut = entry.CommittedCut
 		}
 		if entry.FinalizeShards != nil {
+			// TODO
 		}
 	}
 }
@@ -384,11 +387,9 @@ func (server *DataServer) WaitForAck(cid, csn int32) *datapb.Ack {
 	server.waitMu.Lock()
 	server.wait[id] = ackC
 	server.waitMu.Unlock()
-	select {
-	case ack := <-ackC:
-		server.waitMu.Lock()
-		delete(server.wait, id)
-		server.waitMu.Unlock()
-		return ack
-	}
+	ack := <-ackC
+	server.waitMu.Lock()
+	delete(server.wait, id)
+	server.waitMu.Unlock()
+	return ack
 }

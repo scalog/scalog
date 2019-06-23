@@ -174,7 +174,7 @@ func writeMapToDisk(f string, m map[int32]int32) error {
 	// sort by keys
 	keys := make([]int, len(m))
 	i := 0
-	for k, _ := range m {
+	for k := range m {
 		keys[i] = int(k)
 		i++
 	}

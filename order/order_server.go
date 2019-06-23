@@ -53,11 +53,8 @@ func (s *OrderServer) Start() {
 // runReplication runs Raft to replicate proposed messages and receive
 // committed messages.
 func (s *OrderServer) runReplication() {
-	for {
-		select {
-		case e := <-s.proposeC:
-			s.commitC <- e
-		}
+	for e := range s.proposeC {
+		s.commitC <- e
 	}
 }
 
@@ -135,14 +132,11 @@ func (s *OrderServer) processReport() {
 
 // proposeCommit broadcasts entries in commitC to all subCs.
 func (s *OrderServer) processCommit() {
-	for {
-		select {
-		case e := <-s.commitC:
-			s.subCMu.RLock()
-			for _, c := range s.subC {
-				c <- e
-			}
-			s.subCMu.RUnlock()
+	for e := range s.commitC {
+		s.subCMu.RLock()
+		for _, c := range s.subC {
+			c <- e
 		}
+		s.subCMu.RUnlock()
 	}
 }

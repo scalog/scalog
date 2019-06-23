@@ -84,9 +84,13 @@ func (c *Client) subscribeView() {
 	for {
 		v, err := (*c.discClient).Recv()
 		if err != nil {
-			panic(err)
+			log.Errorf("%v", err)
+			continue
 		}
-		c.view.Update(v)
+		err = c.view.Update(v)
+		if err != nil {
+			log.Errorf("%v", err)
+		}
 	}
 }
 
@@ -165,11 +169,20 @@ func (c *Client) Start() {
 
 func (c *Client) processView() {
 	for v := range c.viewC {
-		c.view.Update(v)
+		err := c.view.Update(v)
+		if err != nil {
+			log.Errorf("%v", err)
+		}
 	}
 }
 
 func (c *Client) processAppend() {
+	appendC := make(chan *datapb.Record)
+	for r := range c.appendC {
+		shard, replica := c.shardingPolicy(c.view, r.Record)
+		// TODO: implement this
+		c.doProcessAppend(appendC, shard, replica)
+	}
 }
 
 func (c *Client) doProcessAppend(appendC chan *datapb.Record, shard, replica int32) {

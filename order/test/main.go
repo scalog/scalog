@@ -36,8 +36,7 @@ func main() {
 	}
 
 	for i := int64(0); i < 3; i++ {
-		var lcs *orderpb.LocalCuts
-		lcs = genLCS(0, 0, 18+i, 10+i)
+		lcs := genLCS(0, 0, 18+i, 10+i)
 		reportClient.Send(lcs)
 		lcs = genLCS(0, 1, 11+i, 17+i)
 		reportClient.Send(lcs)

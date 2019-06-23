@@ -26,7 +26,7 @@ func NewIt() (*It, error) {
 	return it, nil
 }
 
-func (it *It) Start() error {
+func (it *It) Start() {
 	regex := regexp.MustCompile(" +")
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -68,5 +68,4 @@ func (it *It) Start() error {
 			fmt.Fprintln(os.Stderr, "Command error: invalid command")
 		}
 	}
-	return nil
 }
