@@ -347,7 +347,6 @@ func (server *DataServer) processCommittedEntry() {
 						log.Errorf("Assign GSN to storage error: %v", err)
 						continue
 					}
-					startGSN += int64(diff)
 					if i == server.replicaID {
 						for j := int32(0); j < diff; j++ {
 							server.recordsMu.Lock()
@@ -370,6 +369,7 @@ func (server *DataServer) processCommittedEntry() {
 							server.ackC <- ack
 						}
 					}
+					startGSN += int64(diff)
 				}
 			}
 			// replace previous committed cut

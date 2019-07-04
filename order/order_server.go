@@ -16,6 +16,7 @@ type OrderServer struct {
 	clientID         int32
 	batchingInterval time.Duration
 	isLeader         bool
+	startGSN         int64
 	viewID           int32          // use sync/atomic to access viewID
 	shards           map[int32]bool // true for live shards, false for finalized ones
 	forwardC         chan *orderpb.LocalCuts
@@ -24,6 +25,7 @@ type OrderServer struct {
 	finalizeC        chan *orderpb.FinalizeEntry
 	subC             map[int32]chan *orderpb.CommittedEntry
 	subCMu           sync.RWMutex
+	prevCut          map[int32]int64
 }
 
 func NewOrderServer(index, numReplica, dataNumReplica int32, batchingInterval time.Duration) *OrderServer {
@@ -56,6 +58,25 @@ func (s *OrderServer) runReplication() {
 	for e := range s.proposeC {
 		s.commitC <- e
 	}
+}
+
+func (s *OrderServer) computeCutDiff(pcut, ccut map[int32]int64) int64 {
+	sum := int64(0)
+	if pcut == nil {
+		for _, v := range ccut {
+			sum += v
+		}
+	} else {
+		for k, v := range ccut {
+			if vv, ok := pcut[k]; ok {
+				sum += v - vv
+			} else {
+				sum += v
+			}
+		}
+	}
+	return sum
+
 }
 
 func (s *OrderServer) computeCommittedCut(lcs map[int32]*orderpb.LocalCut) map[int32]int64 {
@@ -123,8 +144,10 @@ func (s *OrderServer) processReport() {
 			if s.isLeader { // compute committedCut
 				ccut := s.computeCommittedCut(lcs)
 				vid := atomic.LoadInt32(&s.viewID)
-				ce := &orderpb.CommittedEntry{Seq: 0, ViewID: vid, CommittedCut: &orderpb.CommittedCut{StartGSN: 0, Cut: ccut}, FinalizeShards: nil}
+				ce := &orderpb.CommittedEntry{Seq: 0, ViewID: vid, CommittedCut: &orderpb.CommittedCut{StartGSN: s.startGSN, Cut: ccut}, FinalizeShards: nil}
 				s.proposeC <- ce
+				s.startGSN += s.computeCutDiff(s.prevCut, ccut)
+				s.prevCut = ccut
 			}
 		}
 	}

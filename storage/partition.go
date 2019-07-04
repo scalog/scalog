@@ -1,5 +1,9 @@
 package storage
 
+import (
+	"fmt"
+)
+
 type Partition struct {
 	path          string
 	nextLSN       int64
@@ -39,13 +43,16 @@ func (p *Partition) Read(gsn int64) (string, error) {
 }
 
 func (p *Partition) ReadGSN(gsn int64) (string, error) {
-	if gsn > p.activeSegment.BaseGSN {
+	if gsn >= p.activeSegment.BaseGSN {
 		return p.activeSegment.ReadGSN(gsn)
 	}
 	f := func(s *Segment) int64 {
 		return s.BaseGSN
 	}
 	s := binarySearch(p.segments, f, gsn)
+	if s == nil {
+		return "", fmt.Errorf("Segment with gsn %v not exist", gsn)
+	}
 	return s.ReadGSN(gsn)
 }
 
@@ -67,7 +74,7 @@ func binarySearch(segs []*Segment, get func(*Segment) int64, target int64) *Segm
 		return nil
 	}
 	for i, s := range segs {
-		if get(s) >= target {
+		if get(s) > target {
 			return segs[i-1]
 		}
 	}

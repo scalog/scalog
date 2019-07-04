@@ -72,7 +72,7 @@ func RecoverSegment(path string, BaseLSN int64) (*Segment, error) {
 func (s *Segment) loadLog() error {
 	// if gsn file exists, load it
 	gsnPath := fmt.Sprintf("%v/%v.gsn", s.path, s.BaseLSN)
-	if _, err := os.Stat(gsnPath); os.IsExist(err) {
+	if _, err := os.Stat(gsnPath); err == nil {
 		b := make([]byte, MetaDataEntryLength) //
 		file, err := os.OpenFile(fmt.Sprintf("%v/%v.gsn", s.path, s.BaseLSN), os.O_RDONLY, 0644)
 		if err != nil {
@@ -80,7 +80,7 @@ func (s *Segment) loadLog() error {
 		}
 		for {
 			l, err := file.Read(b)
-			if err != io.EOF {
+			if err == io.EOF {
 				break
 			}
 			if err != nil {
@@ -89,6 +89,9 @@ func (s *Segment) loadLog() error {
 			if l != MetaDataEntryLength {
 				return fmt.Errorf("Read length error: expect %v get %v", MetaDataEntryLength, l)
 			}
+			gsn := int32(binary.LittleEndian.Uint32(b[:4]))
+			ssn := int32(binary.LittleEndian.Uint32(b[4:]))
+			s.gsnMap[gsn] = ssn
 		}
 
 	}
@@ -224,8 +227,11 @@ func (s *Segment) ReadLSN(lsn int64) (string, error) {
 }
 
 func (s *Segment) ReadGSN(gsn int64) (string, error) {
-	pos := s.gsnMap[int32(gsn-s.BaseGSN)]
-	return s.ReadPos(int64(pos))
+	if pos, ok := s.gsnMap[int32(gsn-s.BaseGSN)]; ok {
+		return s.ReadPos(int64(pos))
+	} else {
+		return "", fmt.Errorf("GSN %v doesn't exist", gsn)
+	}
 }
 
 func (s *Segment) ReadPos(pos int64) (string, error) {

@@ -20,7 +20,8 @@ func NewStorage(path string, partitionID, numPartitions, segLen int32) (*Storage
 	}
 	s.partitions = make([]*Partition, numPartitions)
 	for i := int32(0); i < numPartitions; i++ {
-		s.partitions[i], err = NewPartition(path, segLen)
+		partitionPath := fmt.Sprintf("%v/partition-%v", path, i)
+		s.partitions[i], err = NewPartition(partitionPath, segLen)
 		if err != nil {
 			return nil, err
 		}
@@ -49,18 +50,24 @@ func (s *Storage) Read(gsn int64) (string, error) {
 
 func (s *Storage) ReadGSN(gsn int64) (string, error) {
 	// read my own partition first
-	r, err := s.partitions[s.partitionID].ReadGSN(gsn)
-	if err == nil {
-		return r, nil
+	p := s.partitions[s.partitionID]
+	if p != nil {
+		r, err := p.ReadGSN(gsn)
+		if err == nil {
+			return r, nil
+		}
 	}
 	// if not in my own partition, check others
 	for i := int32(0); i < s.numPartitions; i++ {
 		if i == s.partitionID {
 			continue
 		}
-		r, err = s.partitions[i].ReadGSN(gsn)
-		if err == nil {
-			return r, nil
+		p = s.partitions[i]
+		if p != nil {
+			r, err := p.ReadGSN(gsn)
+			if err == nil {
+				return r, nil
+			}
 		}
 	}
 	return "", fmt.Errorf("Record not found as gsn=%v", gsn)
