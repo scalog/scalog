@@ -249,7 +249,6 @@ func (c *Client) AppendOne(record string) (int64, int32, error) {
 	}
 	opts := []grpc.CallOption{}
 	dataClient := datapb.NewDataClient(conn)
-	fmt.Println(r)
 	ack, err := dataClient.AppendOne(context.TODO(), r, opts...)
 	if err != nil {
 		return 0, 0, err
@@ -257,8 +256,19 @@ func (c *Client) AppendOne(record string) (int64, int32, error) {
 	return ack.GlobalSN, ack.ShardID, nil
 }
 
-func (c *Client) Read(gsn, shard int32) (string, error) {
-	return "", nil
+func (c *Client) Read(gsn int64, shard, replica int32) (string, error) {
+	globalSN := &datapb.GlobalSN{Gsn: gsn}
+	conn, err := c.getDataServerConn(shard, replica)
+	if err != nil {
+		return "", err
+	}
+	opts := []grpc.CallOption{}
+	dataClient := datapb.NewDataClient(conn)
+	record, err := dataClient.Read(context.TODO(), globalSN, opts...)
+	if err != nil {
+		return "", err
+	}
+	return record.Record, nil
 }
 
 func (c *Client) SetShardingPolicy(p ShardingPolicy) {

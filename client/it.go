@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -43,8 +44,7 @@ func (it *It) Start() {
 		cmd := regex.Split(cmdString, -1)
 		if cmd[0] == "quit" || cmd[0] == "exit" {
 			break
-		}
-		if cmd[0] == "append" {
+		} else if cmd[0] == "append" {
 			if len(cmd) < 2 {
 				fmt.Fprintln(os.Stderr, "Command error: missing required argument [record]")
 				continue
@@ -56,14 +56,33 @@ func (it *It) Start() {
 				continue
 			}
 			fmt.Fprintf(os.Stderr, "Append result: { Gsn: %d, Shard: %d, Record: %s }\n", gsn, shard, record)
+		} else if cmd[0] == "read" {
+			if len(cmd) != 3 {
+				fmt.Fprintln(os.Stderr, "Command error: missing required argument [record]")
+				continue
+			}
+			gsn, err := strconv.Atoi(cmd[1])
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				continue
+			}
+			sid, err := strconv.Atoi(cmd[2])
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				continue
+			}
+			rid := int32(0)
+			record, err := it.client.Read(int64(gsn), int32(sid), rid)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "%v\n", record)
 		} else if cmd[0] == "help" {
-			fmt.Fprintln(os.Stderr, "Supported commands:")
-			fmt.Fprintln(os.Stderr, "    append [record]")
-			fmt.Fprintln(os.Stderr, "    appendToShard [record]")
-			fmt.Fprintln(os.Stderr, "    subscribe [gsn]")
-			fmt.Fprintln(os.Stderr, "    readRecord [gsn] [shardID]")
-			fmt.Fprintln(os.Stderr, "    trim [gsn]")
-			fmt.Fprintln(os.Stderr, "    exit")
+			fmt.Fprintln(os.Stderr, `Supported commands:
+			append [Record]
+			read [GSN] [ShardID]
+			exit`)
 		} else {
 			fmt.Fprintln(os.Stderr, "Command error: invalid command")
 		}
