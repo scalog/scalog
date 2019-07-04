@@ -85,12 +85,12 @@ func (server *DataServer) Trim(ctx context.Context, gsn *datapb.GlobalSN) (*data
 }
 
 func (server *DataServer) Read(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Record, error) {
-	r, err := server.storage.Read(gsn.Gsn)
+	r, err := server.storage.Read(gsn.GSN)
 	if err != nil {
 		return nil, err
 	}
 	record := &datapb.Record{
-		GlobalSN:       gsn.Gsn,
+		GlobalSN:       gsn.GSN,
 		ShardID:        server.shardID,
 		LocalReplicaID: 0, // TODO figure out local replica id
 		ViewID:         server.viewID,

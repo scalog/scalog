@@ -34,7 +34,7 @@ message Ack {
 }
 
 message GlobalSN {
-	int64 gsn = 1;
+	int64 gSN = 1;
 }
 
 message Empty {}

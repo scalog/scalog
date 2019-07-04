@@ -257,7 +257,7 @@ func (c *Client) AppendOne(record string) (int64, int32, error) {
 }
 
 func (c *Client) Read(gsn int64, shard, replica int32) (string, error) {
-	globalSN := &datapb.GlobalSN{Gsn: gsn}
+	globalSN := &datapb.GlobalSN{GSN: gsn}
 	conn, err := c.getDataServerConn(shard, replica)
 	if err != nil {
 		return "", err
