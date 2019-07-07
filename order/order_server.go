@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/scalog/scalog/order/orderpb"
+
+	"go.etcd.io/etcd/etcdserver/api/snap"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 type OrderServer struct {
@@ -26,9 +29,16 @@ type OrderServer struct {
 	subC             map[int32]chan *orderpb.CommittedEntry
 	subCMu           sync.RWMutex
 	prevCut          map[int32]int64
+	snapMu           sync.Mutex
+
+	rnConfChangeC      chan raftpb.ConfChange
+	rnProposeC         chan string
+	rnCommitC          <-chan *string
+	rnErrorC           <-chan error
+	rnSnapshotterReady <-chan *snap.Snapshotter
 }
 
-func NewOrderServer(index, numReplica, dataNumReplica int32, batchingInterval time.Duration) *OrderServer {
+func NewOrderServer(index, numReplica, dataNumReplica int32, batchingInterval time.Duration, peerList []string) *OrderServer {
 	s := &OrderServer{
 		index:            index,
 		numReplica:       numReplica,
@@ -43,6 +53,20 @@ func NewOrderServer(index, numReplica, dataNumReplica int32, batchingInterval ti
 	s.commitC = make(chan *orderpb.CommittedEntry, 4096)
 	s.finalizeC = make(chan *orderpb.FinalizeEntry, 4096)
 	s.subC = make(map[int32]chan *orderpb.CommittedEntry)
+
+	s.rnConfChangeC = make(chan raftpb.ConfChange)
+	s.rnProposeC = make(chan string)
+	commitC, errorC, snapshotterReady := newRaftNode(
+		int(index)+1, // raftNode is 1-indexed
+		peerList,
+		false, // not to join an existing cluster
+		s.getSnapshot,
+		s.rnProposeC,
+		s.rnConfChangeC,
+	)
+	s.rnCommitC = commitC
+	s.rnErrorC = errorC
+	s.rnSnapshotterReady = snapshotterReady
 	return s
 }
 
@@ -162,4 +186,12 @@ func (s *OrderServer) processCommit() {
 		}
 		s.subCMu.RUnlock()
 	}
+}
+
+func (server *OrderServer) getSnapshot() ([]byte, error) {
+	b := make([]byte, 0)
+	return b, nil
+}
+
+func (server *OrderServer) attemptRecoverFromSnapshot() {
 }

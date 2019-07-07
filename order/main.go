@@ -28,6 +28,10 @@ func Start() {
 	log.Infof("Starting order server %v at 0.0.0.0:%v", index, port)
 	log.Infof("replication-factor: %v", numReplica)
 	log.Infof("order-batching-interval: %v", batchingInterval)
+	peerList := make([]string, numReplica)
+	for i := int32(0); i < numReplica; i++ {
+		peerList[int(i)] = fmt.Sprintf("http://127.0.0.1:%v", port+i)
+	}
 	// listen to the port
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
@@ -43,7 +47,7 @@ func Start() {
 	healthServer.Resume()
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 	// order server
-	server := NewOrderServer(index, numReplica, dataNumReplica, batchingInterval)
+	server := NewOrderServer(index, numReplica, dataNumReplica, batchingInterval, peerList)
 	orderpb.RegisterOrderServer(grpcServer, server)
 	server.Start()
 	// serve grpc server
