@@ -24,13 +24,14 @@ func Start() {
 		log.Fatalf("Failed to parse order-batching-interval: %v", err)
 	}
 	port := int32(viper.GetInt("order-port"))
+	raftPort := int32(viper.GetInt("raft-port"))
 	index := int32(viper.GetInt("id"))
 	log.Infof("Starting order server %v at 0.0.0.0:%v", index, port)
 	log.Infof("replication-factor: %v", numReplica)
 	log.Infof("order-batching-interval: %v", batchingInterval)
 	peerList := make([]string, numReplica)
 	for i := int32(0); i < numReplica; i++ {
-		peerList[int(i)] = fmt.Sprintf("http://127.0.0.1:%v", port+i)
+		peerList[int(i)] = fmt.Sprintf("http://127.0.0.1:%v", raftPort+i)
 	}
 	// listen to the port
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))

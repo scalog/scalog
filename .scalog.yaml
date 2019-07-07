@@ -1,6 +1,7 @@
 namespace: scalogger
 
 order-port: 26733
+raft-port: 27238
 order-replication-factor: 1
 order-batching-interval: 1000ms
 

@@ -6,8 +6,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	log "github.com/scalog/scalog/logger"
 	"github.com/scalog/scalog/order/orderpb"
 
+	"github.com/golang/protobuf/proto"
 	"go.etcd.io/etcd/etcdserver/api/snap"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -74,13 +76,19 @@ func (s *OrderServer) Start() {
 	go s.processReport()
 	go s.runReplication()
 	go s.processCommit()
+	go s.processRNCommit()
 }
 
 // runReplication runs Raft to replicate proposed messages and receive
 // committed messages.
 func (s *OrderServer) runReplication() {
 	for e := range s.proposeC {
-		s.commitC <- e
+		b, err := proto.Marshal(e)
+		if err != nil {
+			log.Errorf("%v", err)
+			continue
+		}
+		s.rnProposeC <- string(b)
 	}
 }
 
@@ -188,10 +196,29 @@ func (s *OrderServer) processCommit() {
 	}
 }
 
+func (s *OrderServer) processRNCommit() {
+	for d := range s.rnCommitC {
+		if d == nil {
+			// TODO: handle snapshots
+			continue
+		}
+		e := &orderpb.CommittedEntry{}
+		// TODO use []byte to avoid the conversion
+		err := proto.Unmarshal([]byte(*d), e)
+		if err != nil {
+			log.Errorf("%v", err)
+			continue
+		}
+		s.commitC <- e
+	}
+}
+
+// TODO
 func (server *OrderServer) getSnapshot() ([]byte, error) {
 	b := make([]byte, 0)
 	return b, nil
 }
 
+// TODO
 func (server *OrderServer) attemptRecoverFromSnapshot() {
 }
