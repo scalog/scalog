@@ -3,12 +3,13 @@ package order
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"time"
+
+	log "github.com/scalog/scalog/logger"
 
 	"go.etcd.io/etcd/etcdserver/api/rafthttp"
 	"go.etcd.io/etcd/etcdserver/api/snap"
@@ -152,7 +153,7 @@ func (rc *raftNode) publishEntries(ents []raftpb.Entry) bool {
 				}
 			case raftpb.ConfChangeRemoveNode:
 				if cc.NodeID == uint64(rc.id) {
-					log.Println("I've been removed from the cluster! Shutting down.")
+					log.Infof("I've been removed from the cluster! Shutting down.")
 					return false
 				}
 				rc.transport.RemovePeer(types.ID(cc.NodeID))
@@ -342,14 +343,14 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 	log.Printf("start snapshot [applied index: %d | last snapshot index: %d]", rc.appliedIndex, rc.snapshotIndex)
 	data, err := rc.getSnapshot()
 	if err != nil {
-		log.Panic(err)
+		log.Fatalf("%v", err)
 	}
 	snap, err := rc.raftStorage.CreateSnapshot(rc.appliedIndex, &rc.confState, data)
 	if err != nil {
-		panic(err)
+		log.Fatalf("%v", err)
 	}
 	if err := rc.saveSnap(snap); err != nil {
-		panic(err)
+		log.Fatalf("%v", err)
 	}
 
 	compactIndex := uint64(1)
@@ -357,7 +358,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 		compactIndex = rc.appliedIndex - snapshotCatchUpEntriesN
 	}
 	if err := rc.raftStorage.Compact(compactIndex); err != nil {
-		panic(err)
+		log.Fatalf("%v", err)
 	}
 
 	log.Printf("compacted log at index %d", compactIndex)
@@ -367,7 +368,7 @@ func (rc *raftNode) maybeTriggerSnapshot() {
 func (rc *raftNode) serveChannels() {
 	snap, err := rc.raftStorage.Snapshot()
 	if err != nil {
-		panic(err)
+		log.Fatalf("%v", err)
 	}
 	rc.confState = snap.Metadata.ConfState
 	rc.snapshotIndex = snap.Metadata.Index
