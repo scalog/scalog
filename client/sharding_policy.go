@@ -24,7 +24,7 @@ func NewDefaultShardingPolicy(numReplica int32) *DefaultShardingPolicy {
 	return s
 }
 
-func (p DefaultShardingPolicy) Shard(view *disc.View, record string) (int32, int32) {
+func (p *DefaultShardingPolicy) Shard(view *disc.View, record string) (int32, int32) {
 	if view == nil {
 		return -1, -1
 	}
@@ -33,5 +33,7 @@ func (p DefaultShardingPolicy) Shard(view *disc.View, record string) (int32, int
 	}
 	rs := rand.New(p.seed).Intn(len(view.LiveShards))
 	rr := int32(rand.New(p.seed).Intn(int(p.numReplica)))
-	return view.LiveShards[rs], rr
+	p.shardID = view.LiveShards[rs]
+	p.replicaID = rr
+	return p.shardID, p.replicaID
 }

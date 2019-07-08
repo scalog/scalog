@@ -15,8 +15,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+type ShardingPolicy interface {
+	Shard(view *disc.View, record string) (int32, int32)
+}
+
 // ShardingPolicy determines which records are appended to which shards.
-type ShardingPolicy func(view *disc.View, record string) (int32, int32)
 
 type Client struct {
 	clientID       int32
@@ -62,7 +65,7 @@ func NewClient(discAddr string, numReplica int32) (*Client, error) {
 		viewID:     0,
 		localRun:   false,
 	}
-	c.shardingPolicy = NewDefaultShardingPolicy(numReplica).Shard
+	c.shardingPolicy = NewDefaultShardingPolicy(numReplica)
 	c.viewC = make(chan *discpb.View, 4096)
 	c.appendC = make(chan *datapb.Record, 4096)
 	c.ackC = make(chan *datapb.Ack, 4096)
@@ -195,7 +198,7 @@ func (c *Client) processView() {
 
 func (c *Client) processAppend() {
 	for r := range c.appendC {
-		shard, replica := c.shardingPolicy(c.view, r.Record)
+		shard, replica := c.shardingPolicy.Shard(c.view, r.Record)
 		r := &datapb.Record{
 			ClientID: c.clientID,
 			ClientSN: c.getNextClientSN(),
@@ -241,7 +244,7 @@ func (c *Client) AppendOne(record string) (int64, int32, error) {
 		ClientSN: c.getNextClientSN(),
 		Record:   record,
 	}
-	shard, replica := c.shardingPolicy(c.view, record)
+	shard, replica := c.shardingPolicy.Shard(c.view, record)
 	fmt.Printf("shard: %v, replica: %v\n", shard, replica)
 	conn, err := c.getDataServerConn(shard, replica)
 	if err != nil {
