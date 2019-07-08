@@ -26,6 +26,7 @@ func Start() {
 		log.Fatalf("Failed to parse order-batching-interval: %v", err)
 	}
 	port := int32(viper.GetInt("order-port")) + oid
+	log.Infof("order-port: %v", port)
 	raftPort := int32(viper.GetInt("raft-port"))
 	log.Infof("Starting order server %v at 0.0.0.0:%v", oid, port)
 	log.Infof("replication-factor: %v", numReplica)

@@ -5,9 +5,9 @@ raft-port: 27238
 order-replication-factor: 3
 order-batching-interval: 1000ms
 
+data-port: 23282
 data-replication-factor: 2
 data-batching-interval: 1000ms
 order-addr: 127.0.0.1:26733
-data-peers: 127.0.0.1:23282,127.0.0.1:23283
 
 discovery-addr: 127.0.0.1:23472

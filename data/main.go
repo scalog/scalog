@@ -3,7 +3,6 @@ package data
 import (
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,23 +29,17 @@ func Start() {
 		log.Fatalf("Failed to parse ordering-batching-interval: %v", err)
 	}
 	log.Infof("%v: %v", "data-batching-interval", batchingInterval)
+	basePort := int32(viper.GetInt("data-port"))
+	port := basePort + (sid * numReplica) + rid
+	log.Infof("%v: %v", "data-port", port)
 	orderAddr := viper.GetString("order-addr")
 	log.Infof("%v: %v", "order-addr", orderAddr)
-	peers := viper.GetString("data-peers")
+	peerList := make([]string, numReplica)
+	for i := int32(0); i < numReplica; i++ {
+		peerList[int(i)] = fmt.Sprintf("127.0.0.1:%v", basePort+(sid*numReplica)+i)
+	}
+	peers := strings.Join(peerList, ",")
 	log.Infof("%v: %v", "data-peers", peers)
-	// parse peers to get port to listen to
-	ps := strings.Split(peers, ",")
-	if int32(len(ps)) != numReplica {
-		log.Fatalf("The number of peers in peer list doesn't match the number of replicas: %v vs %v", len(ps), numReplica)
-	}
-	addr := strings.Split(ps[rid], ":")
-	if len(addr) != 2 {
-		log.Fatalf("Peer address format error: %v", ps[rid])
-	}
-	port, err := strconv.Atoi(addr[1])
-	if err != nil {
-		log.Fatalf("Peer port format error%v", err)
-	}
 	// listen to the port
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
