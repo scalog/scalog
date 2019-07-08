@@ -20,6 +20,6 @@ var orderCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(orderCmd)
-	orderCmd.PersistentFlags().IntP("id", "i", 0, "Replica index")
-	viper.BindPFlag("id", orderCmd.PersistentFlags().Lookup("id"))
+	orderCmd.PersistentFlags().IntP("oid", "i", 0, "Replica index")
+	viper.BindPFlag("oid", orderCmd.PersistentFlags().Lookup("oid"))
 }

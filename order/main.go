@@ -17,16 +17,17 @@ import (
 
 func Start() {
 	// read configuration
+	oid := int32(viper.GetInt("oid"))
+	log.Infof("%v: %v", "oid", oid)
 	numReplica := int32(viper.GetInt("order-replication-factor"))
 	dataNumReplica := int32(viper.GetInt("data-replication-factor"))
 	batchingInterval, err := time.ParseDuration(viper.GetString("order-batching-interval"))
 	if err != nil {
 		log.Fatalf("Failed to parse order-batching-interval: %v", err)
 	}
-	port := int32(viper.GetInt("order-port"))
+	port := int32(viper.GetInt("order-port")) + oid
 	raftPort := int32(viper.GetInt("raft-port"))
-	index := int32(viper.GetInt("id"))
-	log.Infof("Starting order server %v at 0.0.0.0:%v", index, port)
+	log.Infof("Starting order server %v at 0.0.0.0:%v", oid, port)
 	log.Infof("replication-factor: %v", numReplica)
 	log.Infof("order-batching-interval: %v", batchingInterval)
 	peerList := make([]string, numReplica)
@@ -48,7 +49,7 @@ func Start() {
 	healthServer.Resume()
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 	// order server
-	server := NewOrderServer(index, numReplica, dataNumReplica, batchingInterval, peerList)
+	server := NewOrderServer(oid, numReplica, dataNumReplica, batchingInterval, peerList)
 	orderpb.RegisterOrderServer(grpcServer, server)
 	server.Start()
 	// serve grpc server
