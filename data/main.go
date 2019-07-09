@@ -8,6 +8,7 @@ import (
 
 	"github.com/scalog/scalog/data/datapb"
 	log "github.com/scalog/scalog/logger"
+	oaddr "github.com/scalog/scalog/pkg/order_addr"
 
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
@@ -34,6 +35,8 @@ func Start() {
 	log.Infof("%v: %v", "data-port", port)
 	orderAddr := viper.GetString("order-addr")
 	log.Infof("%v: %v", "order-addr", orderAddr)
+	// for kubernetes deployment, use k8sOrderAddr := oaddr.NewK8sOrderAddr(orderPort)
+	localOrderAddr := oaddr.NewLocalOrderAddr(orderAddr)
 	peerList := make([]string, numReplica)
 	for i := int32(0); i < numReplica; i++ {
 		peerList[int(i)] = fmt.Sprintf("127.0.0.1:%v", basePort+(sid*numReplica)+i)
@@ -55,7 +58,7 @@ func Start() {
 	healthServer.Resume()
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 	// data server
-	server := NewDataServer(rid, sid, numReplica, batchingInterval, peers, orderAddr)
+	server := NewDataServer(rid, sid, numReplica, batchingInterval, peers, localOrderAddr)
 	if server == nil {
 		log.Fatalf("Failed to create data server")
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/scalog/scalog/data/datapb"
 	log "github.com/scalog/scalog/logger"
 	"github.com/scalog/scalog/order/orderpb"
+	oaddr "github.com/scalog/scalog/pkg/order_addr"
 	"github.com/scalog/scalog/storage"
 
 	"google.golang.org/grpc"
@@ -29,7 +30,7 @@ type DataServer struct {
 	localCutMu       sync.Mutex
 	prevCommittedCut *orderpb.CommittedCut
 	// ordering layer information
-	orderAddr   string
+	orderAddr   oaddr.OrderAddr
 	orderConn   *grpc.ClientConn
 	orderClient *orderpb.Order_ReportClient
 	orderMu     sync.RWMutex
@@ -60,7 +61,7 @@ type DataServer struct {
 	recordsMu sync.Mutex
 }
 
-func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr string) *DataServer {
+func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr oaddr.OrderAddr) *DataServer {
 	var err error
 	server := &DataServer{
 		replicaID:        replicaID,
@@ -69,6 +70,7 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		viewID:           0,
 		numReplica:       numReplica,
 		batchingInterval: batchingInterval,
+		orderAddr:        orderAddr,
 	}
 	server.localCut = make([]int64, numReplica)
 	for i := 0; i < int(numReplica); i++ {
@@ -106,7 +108,7 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		}
 	}
 	for i := 0; i < 10; i++ {
-		err = server.UpdateOrderAddr(orderAddr)
+		err = server.UpdateOrder()
 		if err == nil {
 			break
 		}
@@ -125,7 +127,6 @@ func (server *DataServer) UpdateOrderAddr(addr string) error {
 	if server.orderConn != nil {
 		server.orderConn.Close()
 	}
-	server.orderAddr = addr
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
@@ -139,6 +140,14 @@ func (server *DataServer) UpdateOrderAddr(addr string) error {
 	}
 	server.orderClient = &orderReportClient
 	return nil
+}
+
+func (server *DataServer) UpdateOrder() error {
+	addr := server.orderAddr.Get()
+	if len(addr) == 0 {
+		return fmt.Errorf("Wrong order-addr format: %v", addr)
+	}
+	return server.UpdateOrderAddr(addr)
 }
 
 // UpdatePeers updates the peer list of the shard. It should be called only at

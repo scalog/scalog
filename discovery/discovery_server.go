@@ -9,13 +9,10 @@ import (
 	"github.com/scalog/scalog/discovery/discpb"
 	log "github.com/scalog/scalog/logger"
 	"github.com/scalog/scalog/order/orderpb"
+	oaddr "github.com/scalog/scalog/pkg/order_addr"
 
 	"google.golang.org/grpc"
 )
-
-type OrderAddr interface {
-	Get() string
-}
 
 type DiscoveryServer struct {
 	// server configuration
@@ -26,7 +23,7 @@ type DiscoveryServer struct {
 	shards   map[int32]bool
 	viewMu   sync.Mutex
 	// ordering layer information
-	orderAddr   OrderAddr
+	orderAddr   oaddr.OrderAddr
 	orderConn   *grpc.ClientConn
 	orderClient *orderpb.Order_ReportClient
 	orderMu     sync.Mutex
@@ -35,7 +32,7 @@ type DiscoveryServer struct {
 	viewCMu sync.Mutex
 }
 
-func NewDiscoveryServer(numReplica int32, orderAddr OrderAddr) *DiscoveryServer {
+func NewDiscoveryServer(numReplica int32, orderAddr oaddr.OrderAddr) *DiscoveryServer {
 	ds := &DiscoveryServer{
 		numReplica: numReplica,
 		viewID:     -1,
