@@ -21,6 +21,8 @@ func Start() {
 	// read configuration
 	orderAddr := viper.GetString("order-addr")
 	log.Infof("%v: %v", "order-addr", orderAddr)
+	// for kubernetes deployment, use k8sOrderAddr := NewK8sOrderAddr(orderPort)
+	localOrderAddr := NewLocalOrderAddr(orderAddr)
 	discAddr := viper.GetString("discovery-addr")
 	log.Infof("%v: %v", "discovery-addr", discAddr)
 	numReplica := int32(viper.GetInt("data-replication-factor"))
@@ -49,7 +51,7 @@ func Start() {
 	healthServer.Resume()
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 	// order server
-	server := NewDiscoveryServer(numReplica, orderAddr)
+	server := NewDiscoveryServer(numReplica, localOrderAddr)
 	if server == nil {
 		log.Fatalf("Failed to create discovery server")
 	}

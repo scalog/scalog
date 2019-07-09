@@ -13,6 +13,10 @@ import (
 	"google.golang.org/grpc"
 )
 
+type OrderAddr interface {
+	Get() string
+}
+
 type DiscoveryServer struct {
 	// server configuration
 	numReplica int32
@@ -22,7 +26,7 @@ type DiscoveryServer struct {
 	shards   map[int32]bool
 	viewMu   sync.Mutex
 	// ordering layer information
-	orderAddr   string
+	orderAddr   OrderAddr
 	orderConn   *grpc.ClientConn
 	orderClient *orderpb.Order_ReportClient
 	orderMu     sync.Mutex
@@ -31,17 +35,18 @@ type DiscoveryServer struct {
 	viewCMu sync.Mutex
 }
 
-func NewDiscoveryServer(numReplica int32, orderAddr string) *DiscoveryServer {
+func NewDiscoveryServer(numReplica int32, orderAddr OrderAddr) *DiscoveryServer {
 	ds := &DiscoveryServer{
 		numReplica: numReplica,
 		viewID:     -1,
 		shards:     make(map[int32]bool),
 		clientID:   0,
 		viewC:      make(map[int32]chan *discpb.View),
+		orderAddr:  orderAddr,
 	}
 	var err error
 	for i := 0; i < 10; i++ {
-		err = ds.UpdateOrderAddr(orderAddr)
+		err = ds.UpdateOrder()
 		if err == nil {
 			break
 		}
@@ -60,7 +65,10 @@ func (server *DiscoveryServer) Start() {
 func (server *DiscoveryServer) UpdateOrderAddr(addr string) error {
 	server.orderMu.Lock()
 	defer server.orderMu.Unlock()
-	server.orderAddr = addr
+	if server.orderConn != nil {
+		server.orderConn.Close()
+		server.orderConn = nil
+	}
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
@@ -76,11 +84,21 @@ func (server *DiscoveryServer) UpdateOrderAddr(addr string) error {
 	return nil
 }
 
+func (server *DiscoveryServer) UpdateOrder() error {
+	addr := server.orderAddr.Get()
+	if len(addr) == 0 {
+		return fmt.Errorf("Wrong order-addr format: %v", addr)
+	}
+	return server.UpdateOrderAddr(addr)
+}
+
 func (server *DiscoveryServer) subscribe() {
 	for {
 		entry, err := (*server.orderClient).Recv()
 		if err != nil {
-			log.Fatalf("%v", err)
+			log.Errorf("%v", err)
+			server.UpdateOrder()
+			continue
 		}
 		// check if there is any update on view
 		server.viewMu.Lock()
@@ -92,6 +110,7 @@ func (server *DiscoveryServer) subscribe() {
 		// make sure the view id change is incremental
 		if entry.ViewID-server.viewID != 1 {
 			log.Errorf("ViewID is not incremental: current %v, received %v", server.viewID, entry.ViewID)
+			server.UpdateOrder()
 			continue
 		}
 		// update view stored as discovery server state
