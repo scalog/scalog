@@ -19,3 +19,11 @@ func K8sDataServerDomain(sid, rid int32) string {
 func K8sDataServerAddr(sid, rid int32, port uint16) string {
 	return fmt.Sprintf("%v:%v", K8sDataServerDomain(sid, rid), port)
 }
+
+func K8sDiscLeaderDomain() string {
+	return "dns:///service.disc.scalog"
+}
+
+func K8sDiscLeaderAddr(port uint16) string {
+	return fmt.Sprintf("%v:%v", K8sDiscLeaderDomain(), port)
+}
