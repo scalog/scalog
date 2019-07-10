@@ -11,7 +11,7 @@ import (
 	"github.com/scalog/scalog/data/datapb"
 	log "github.com/scalog/scalog/logger"
 	"github.com/scalog/scalog/order/orderpb"
-	oaddr "github.com/scalog/scalog/pkg/order_addr"
+	"github.com/scalog/scalog/pkg/address"
 	"github.com/scalog/scalog/storage"
 
 	"google.golang.org/grpc"
@@ -30,7 +30,7 @@ type DataServer struct {
 	localCutMu       sync.Mutex
 	prevCommittedCut *orderpb.CommittedCut
 	// ordering layer information
-	orderAddr   oaddr.OrderAddr
+	orderAddr   address.OrderAddr
 	orderConn   *grpc.ClientConn
 	orderClient *orderpb.Order_ReportClient
 	orderMu     sync.RWMutex
@@ -61,7 +61,7 @@ type DataServer struct {
 	recordsMu sync.Mutex
 }
 
-func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr oaddr.OrderAddr) *DataServer {
+func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr address.OrderAddr) *DataServer {
 	var err error
 	server := &DataServer{
 		replicaID:        replicaID,

@@ -9,7 +9,7 @@ import (
 
 	"github.com/scalog/scalog/discovery/discpb"
 	log "github.com/scalog/scalog/logger"
-	oaddr "github.com/scalog/scalog/pkg/order_addr"
+	"github.com/scalog/scalog/pkg/address"
 
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
@@ -22,8 +22,8 @@ func Start() {
 	// read configuration
 	orderAddr := viper.GetString("order-addr")
 	log.Infof("%v: %v", "order-addr", orderAddr)
-	// for kubernetes deployment, use k8sOrderAddr := oaddr.NewK8sOrderAddr(orderPort)
-	localOrderAddr := oaddr.NewLocalOrderAddr(orderAddr)
+	// for kubernetes deployment, use k8sOrderAddr := address.NewK8sOrderAddr(orderPort)
+	localOrderAddr := address.NewLocalOrderAddr(orderAddr)
 	discAddr := viper.GetString("discovery-addr")
 	log.Infof("%v: %v", "discovery-addr", discAddr)
 	numReplica := int32(viper.GetInt("data-replication-factor"))

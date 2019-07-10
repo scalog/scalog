@@ -1,4 +1,4 @@
-package order_addr
+package address
 
 type LocalOrderAddr struct {
 	addr string

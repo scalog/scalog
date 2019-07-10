@@ -1,4 +1,4 @@
-package order_addr
+package address
 
 import (
 	"github.com/scalog/scalog/pkg/constant"
