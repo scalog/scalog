@@ -12,6 +12,7 @@ import (
 	disc "github.com/scalog/scalog/discovery"
 	"github.com/scalog/scalog/discovery/discpb"
 	log "github.com/scalog/scalog/logger"
+	"github.com/scalog/scalog/pkg/address"
 	"google.golang.org/grpc"
 )
 
@@ -34,36 +35,27 @@ type Client struct {
 	subC           chan *datapb.Record
 	shardingPolicy ShardingPolicy
 
-	discAddr   string
+	discAddr   address.DiscAddr
 	discConn   *grpc.ClientConn
 	discClient *discpb.Discovery_DiscoverClient
 	discMu     sync.Mutex
 
+	dataAddr           address.DataAddr
 	dataConn           map[int32]*grpc.ClientConn
 	dataConnMu         sync.Mutex
 	dataAppendClient   map[int32]*datapb.Data_AppendClient
 	dataAppendClientMu sync.Mutex
-
-	localRun bool
 }
 
-func NewLocalClient(discAddr string, numReplica int32) (*Client, error) {
-	c, err := NewClient(discAddr, numReplica)
-	if err != nil {
-		return nil, err
-	}
-	c.localRun = true
-	return c, nil
-}
-
-func NewClient(discAddr string, numReplica int32) (*Client, error) {
+func NewClient(discAddr address.DiscAddr, dataAddr address.DataAddr, numReplica int32) (*Client, error) {
 	c := &Client{
 		clientID:   generateClientID(),
 		numReplica: numReplica,
 		nextCSN:    -1,
 		nextGSN:    0,
 		viewID:     0,
-		localRun:   false,
+		dataAddr:   dataAddr,
+		discAddr:   discAddr,
 	}
 	c.shardingPolicy = NewDefaultShardingPolicy(numReplica)
 	c.viewC = make(chan *discpb.View, 4096)
@@ -73,7 +65,7 @@ func NewClient(discAddr string, numReplica int32) (*Client, error) {
 	c.dataConn = make(map[int32]*grpc.ClientConn)
 	c.dataAppendClient = make(map[int32]*datapb.Data_AppendClient)
 	c.view = disc.NewView()
-	err := c.UpdateDiscovery(discAddr)
+	err := c.UpdateDiscovery()
 	if err != nil {
 		return nil, err
 	}
@@ -100,14 +92,17 @@ func (c *Client) subscribeView() {
 	}
 }
 
-func (c *Client) UpdateDiscovery(addr string) error {
+func (c *Client) UpdateDiscovery() error {
+	return c.UpdateDiscoveryAddr(c.discAddr.Get())
+}
+
+func (c *Client) UpdateDiscoveryAddr(addr string) error {
 	c.discMu.Lock()
 	defer c.discMu.Unlock()
 	if c.discConn != nil {
 		c.discConn.Close()
 		c.discConn = nil
 	}
-	c.discAddr = addr
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
@@ -127,12 +122,7 @@ func (c *Client) UpdateDiscovery(addr string) error {
 // the caller is responsible to lock the data
 func (c *Client) connDataServer(shard, replica int32) (*grpc.ClientConn, error) {
 	globalReplicaID := shard*c.numReplica + replica
-	var addr string
-	if c.localRun {
-		addr = fmt.Sprintf("127.0.0.1:%v", 23282+globalReplicaID)
-	} else { // nolint
-		// TODO request kubedns for replica address
-	}
+	addr := c.dataAddr.Get(shard, replica)
 	if conn, ok := c.dataConn[globalReplicaID]; ok && conn != nil {
 		c.dataConn[globalReplicaID].Close()
 		delete(c.dataConn, globalReplicaID)

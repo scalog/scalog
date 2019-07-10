@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/scalog/scalog/pkg/address"
+
 	"github.com/spf13/viper"
 )
 
@@ -16,14 +18,16 @@ type It struct {
 }
 
 func NewIt() (*It, error) {
-	discAddr := viper.GetString("discovery-addr")
 	numReplica := int32(viper.GetInt("data-replication-factor"))
-	client, err := NewLocalClient(discAddr, numReplica)
+	discPort := uint16(viper.GetInt("disc-port"))
+	discAddr := address.NewLocalDiscAddr(discPort)
+	dataPort := uint16(viper.GetInt("data-port"))
+	dataAddr := address.NewLocalDataAddr(numReplica, dataPort)
+	client, err := NewClient(discAddr, dataAddr, numReplica)
 	if err != nil {
 		return nil, err
 	}
-	it := &It{}
-	it.client = client
+	it := &It{client}
 	return it, nil
 }
 

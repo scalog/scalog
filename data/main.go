@@ -32,10 +32,9 @@ func Start() {
 	basePort := uint16(viper.GetInt("data-port"))
 	port := basePort + uint16(sid*numReplica+rid)
 	log.Infof("%v: %v", "data-port", port)
-	orderAddr := viper.GetString("order-addr")
-	log.Infof("%v: %v", "order-addr", orderAddr)
+	orderPort := uint16(viper.GetInt("order-port"))
 	// for kubernetes deployment, use k8sOrderAddr := address.NewK8sOrderAddr(orderPort)
-	localOrderAddr := address.NewLocalOrderAddr(orderAddr)
+	localOrderAddr := address.NewLocalOrderAddr(orderPort)
 	localDataAddr := address.NewLocalDataAddr(numReplica, basePort)
 	// listen to the port
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))

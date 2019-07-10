@@ -1,17 +1,21 @@
 package address
 
+import (
+	"fmt"
+)
+
 type LocalOrderAddr struct {
-	addr string
+	port uint16
 }
 
-func NewLocalOrderAddr(addr string) *LocalOrderAddr {
-	return &LocalOrderAddr{addr}
+func NewLocalOrderAddr(port uint16) *LocalOrderAddr {
+	return &LocalOrderAddr{port}
 }
 
-func (s *LocalOrderAddr) UpdateAddr(addr string) {
-	s.addr = addr
+func (s *LocalOrderAddr) UpdateAddr(port uint16) {
+	s.port = port
 }
 
 func (s *LocalOrderAddr) Get() string {
-	return s.addr
+	return fmt.Sprintf("127.0.0.1:%v", s.port)
 }
