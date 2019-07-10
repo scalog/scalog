@@ -56,15 +56,9 @@ func Start() {
 		log.Fatalf("Failed to create data server")
 	}
 	datapb.RegisterDataServer(grpcServer, server)
-	go func() {
-		err := grpcServer.Serve(lis)
-		if err != nil {
-			log.Fatalf("%v", err)
-		}
-	}()
 	server.Start()
-	for {
-		time.Sleep(time.Second)
+	err = grpcServer.Serve(lis)
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
-
 }
