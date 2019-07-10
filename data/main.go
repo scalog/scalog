@@ -3,7 +3,6 @@ package data
 import (
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/scalog/scalog/data/datapb"
@@ -30,19 +29,14 @@ func Start() {
 		log.Fatalf("Failed to parse ordering-batching-interval: %v", err)
 	}
 	log.Infof("%v: %v", "data-batching-interval", batchingInterval)
-	basePort := int32(viper.GetInt("data-port"))
-	port := basePort + (sid * numReplica) + rid
+	basePort := uint16(viper.GetInt("data-port"))
+	port := basePort + uint16(sid*numReplica+rid)
 	log.Infof("%v: %v", "data-port", port)
 	orderAddr := viper.GetString("order-addr")
 	log.Infof("%v: %v", "order-addr", orderAddr)
 	// for kubernetes deployment, use k8sOrderAddr := address.NewK8sOrderAddr(orderPort)
 	localOrderAddr := address.NewLocalOrderAddr(orderAddr)
-	peerList := make([]string, numReplica)
-	for i := int32(0); i < numReplica; i++ {
-		peerList[int(i)] = fmt.Sprintf("127.0.0.1:%v", basePort+(sid*numReplica)+i)
-	}
-	peers := strings.Join(peerList, ",")
-	log.Infof("%v: %v", "data-peers", peers)
+	localDataAddr := address.NewLocalDataAddr(numReplica, basePort)
 	// listen to the port
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
@@ -58,7 +52,7 @@ func Start() {
 	healthServer.Resume()
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 	// data server
-	server := NewDataServer(rid, sid, numReplica, batchingInterval, peers, localOrderAddr)
+	server := NewDataServer(rid, sid, numReplica, batchingInterval, localDataAddr, localOrderAddr)
 	if server == nil {
 		log.Fatalf("Failed to create data server")
 	}

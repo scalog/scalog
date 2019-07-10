@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -35,7 +34,7 @@ type DataServer struct {
 	orderClient *orderpb.Order_ReportClient
 	orderMu     sync.RWMutex
 	// peer information
-	peers       []string
+	dataAddr    address.DataAddr
 	peerConns   []*grpc.ClientConn
 	peerClients []*datapb.Data_ReplicateClient
 	peerDoneC   []chan interface{}
@@ -61,7 +60,7 @@ type DataServer struct {
 	recordsMu sync.Mutex
 }
 
-func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, peers string, orderAddr address.OrderAddr) *DataServer {
+func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.Duration, dataAddr address.DataAddr, orderAddr address.OrderAddr) *DataServer {
 	var err error
 	server := &DataServer{
 		replicaID:        replicaID,
@@ -71,18 +70,12 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		numReplica:       numReplica,
 		batchingInterval: batchingInterval,
 		orderAddr:        orderAddr,
+		dataAddr:         dataAddr,
 	}
 	server.localCut = make([]int64, numReplica)
 	for i := 0; i < int(numReplica); i++ {
 		server.localCut[i] = 0
 	}
-	// check if the number of peers matches that in the configuration
-	ps := strings.Split(peers, ",")
-	if int32(len(ps)) != server.numReplica {
-		log.Errorf("the number of peers in peer list doesn't match the number of replicas: %v vs %v", len(ps), numReplica)
-		return nil
-	}
-	server.peers = ps
 	// initialize basic data structures
 	server.committedEntryC = make(chan *orderpb.CommittedEntry, 4096)
 	server.ackSendC = make(map[int32]chan *datapb.Ack)
@@ -206,20 +199,20 @@ func (server *DataServer) connectToPeer(peer int32) error {
 	var conn *grpc.ClientConn
 	var err error
 	for i := 0; i < 10; i++ {
-		conn, err = grpc.Dial(server.peers[peer], opts...)
+		conn, err = grpc.Dial(server.dataAddr.Get(server.shardID, peer), opts...)
 		if err == nil {
 			break
 		}
 		time.Sleep(time.Millisecond)
 	}
 	if err != nil {
-		return fmt.Errorf("Dial peer %v failed: %v", server.peers[peer], err)
+		return fmt.Errorf("Dial peer %v failed: %v", server.dataAddr.Get(server.shardID, peer), err)
 	}
 	server.peerConns[peer] = conn
 	dataClient := datapb.NewDataClient(conn)
 	replicateSendClient, err := dataClient.Replicate(context.Background())
 	if err != nil {
-		return fmt.Errorf("Create replicate client to %v failed: %v", server.peers[peer], err)
+		return fmt.Errorf("Create replicate client to %v failed: %v", server.dataAddr.Get(server.shardID, peer), err)
 	}
 	server.peerClients[peer] = &replicateSendClient
 	return nil
