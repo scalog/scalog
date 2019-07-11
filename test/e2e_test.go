@@ -1,4 +1,4 @@
-package main
+package test
 
 import (
 	"os"
@@ -20,7 +20,7 @@ func TestEnd2End(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 	// read configuration file
-	viper.SetConfigFile(".scalog.yaml")
+	viper.SetConfigFile("../.scalog.yaml")
 	viper.AutomaticEnv()
 	err = viper.ReadInConfig()
 	if err != nil {

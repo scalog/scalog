@@ -67,4 +67,7 @@ func StartData(sid, rid int32) {
 		}
 	}()
 	server.Start()
+	for {
+		time.Sleep(time.Second)
+	}
 }

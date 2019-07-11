@@ -56,10 +56,15 @@ func StartOrder(oid int32) {
 	// order server
 	server := NewOrderServer(oid, numReplica, dataNumReplica, batchingInterval, peerList)
 	orderpb.RegisterOrderServer(grpcServer, server)
-	server.Start()
 	// serve grpc server
-	err = grpcServer.Serve(lis)
-	if err != nil {
-		log.Fatalf("Failed to server grpc: %v", err)
+	go func() {
+		err = grpcServer.Serve(lis)
+		if err != nil {
+			log.Fatalf("Failed to server grpc: %v", err)
+		}
+	}()
+	server.Start()
+	for {
+		time.Sleep(time.Second)
 	}
 }
