@@ -17,11 +17,15 @@ import (
 )
 
 func Start() {
-	// read configuration
 	sid := int32(viper.GetInt("sid"))
 	log.Infof("%v: %v", "sid", sid)
 	rid := int32(viper.GetInt("rid"))
 	log.Infof("%v: %v", "rid", rid)
+	StartData(sid, rid)
+}
+
+func StartData(sid, rid int32) {
+	// read configuration
 	numReplica := int32(viper.GetInt("data-replication-factor"))
 	log.Infof("%v: %v", "data-replication-factor", numReplica)
 	batchingInterval, err := time.ParseDuration(viper.GetString("data-batching-interval"))
@@ -56,9 +60,11 @@ func Start() {
 		log.Fatalf("Failed to create data server")
 	}
 	datapb.RegisterDataServer(grpcServer, server)
+	go func() {
+		err = grpcServer.Serve(lis)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+	}()
 	server.Start()
-	err = grpcServer.Serve(lis)
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
 }

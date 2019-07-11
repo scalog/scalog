@@ -16,9 +16,13 @@ import (
 )
 
 func Start() {
-	// read configuration
 	oid := int32(viper.GetInt("oid"))
 	log.Infof("%v: %v", "oid", oid)
+	StartOrder(oid)
+}
+
+func StartOrder(oid int32) {
+	// read configuration
 	numReplica := int32(viper.GetInt("order-replication-factor"))
 	dataNumReplica := int32(viper.GetInt("data-replication-factor"))
 	batchingInterval, err := time.ParseDuration(viper.GetString("order-batching-interval"))

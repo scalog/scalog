@@ -88,8 +88,8 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 	server.wait = make(map[int64]chan *datapb.Ack)
 	server.prevCommittedCut = &orderpb.CommittedCut{}
 	server.records = make(map[int64]*datapb.Record)
-	path := fmt.Sprintf("storage-%v-%v", shardID, replicaID) // TODO configure path
-	segLen := int32(1000)                                    // TODO configurable segment length
+	path := fmt.Sprintf("log/storage-%v-%v", shardID, replicaID) // TODO configure path
+	segLen := int32(1000)                                        // TODO configurable segment length
 	storage, err := storage.NewStorage(path, replicaID, numReplica, segLen)
 	if err != nil {
 		log.Fatalf("Create storage failed: %v", err)
@@ -155,7 +155,7 @@ func (server *DataServer) ConnPeers() error {
 			err := server.connectToPeer(i)
 			if err != nil {
 				log.Errorf("%v", err)
-				continue
+				return err
 			}
 			done := make(chan interface{})
 			sendC := server.replicateSendC[i]
@@ -168,16 +168,21 @@ func (server *DataServer) ConnPeers() error {
 }
 
 func (server *DataServer) Start() {
-	err := server.ConnPeers()
-	if err != nil {
-		log.Fatalf("%v", err)
+	for i := 0; i < 10; i++ {
+		err := server.ConnPeers()
+		if err != nil {
+			log.Errorf("%v", err)
+			continue
+		}
+		go server.processAppend()
+		go server.processReplicate()
+		go server.processAck()
+		go server.processCommittedEntry()
+		go server.reportLocalCut()
+		go server.receiveCommittedCut()
+		return
 	}
-	go server.processAppend()
-	go server.processReplicate()
-	go server.processAck()
-	go server.processCommittedEntry()
-	go server.reportLocalCut()
-	go server.receiveCommittedCut()
+	log.Errorf("Error creating data server sid=%v,rid=%v", server.shardID, server.replicaID)
 }
 
 func (server *DataServer) connectToPeer(peer int32) error {
@@ -210,7 +215,8 @@ func (server *DataServer) connectToPeer(peer int32) error {
 	}
 	server.peerConns[peer] = conn
 	dataClient := datapb.NewDataClient(conn)
-	replicateSendClient, err := dataClient.Replicate(context.Background())
+	callOpts := []grpc.CallOption{}
+	replicateSendClient, err := dataClient.Replicate(context.Background(), callOpts...)
 	if err != nil {
 		return fmt.Errorf("Create replicate client to %v failed: %v", server.dataAddr.Get(server.shardID, peer), err)
 	}
@@ -222,6 +228,7 @@ func (server *DataServer) replicateRecords(done <-chan interface{}, ch chan *dat
 	for {
 		select {
 		case record := <-ch:
+			log.Debugf("Data %v,%v send: %v", server.shardID, server.replicaID, record)
 			err := (*client).Send(record)
 			if err != nil {
 				log.Errorf("Send record error: %v", err)
@@ -240,6 +247,7 @@ func (server *DataServer) processAppend() {
 		server.replicateC <- record
 		for i, c := range server.replicateSendC {
 			if int32(i) != server.replicaID {
+				log.Debugf("Data forward to %v: %v", i, record)
 				c <- record
 			}
 		}
@@ -249,6 +257,7 @@ func (server *DataServer) processAppend() {
 // processReplicate writes records to local storage
 func (server *DataServer) processReplicate() {
 	for record := range server.replicateC {
+		log.Debugf("Data %v,%v process: %v", server.shardID, server.replicaID, record)
 		lsn, err := server.storage.WriteToPartition(record.LocalReplicaID, record.Record)
 		if err != nil {
 			log.Fatalf("Write to storage failed: %v", err)
@@ -295,6 +304,7 @@ func (server *DataServer) reportLocalCut() {
 		lcs.Cuts[0].Cut = make([]int64, len(server.localCut))
 		copy(lcs.Cuts[0].Cut, server.localCut)
 		server.localCutMu.Unlock()
+		log.Debugf("Data report: %v", lcs)
 		err := (*server.orderClient).Send(lcs)
 		if err != nil {
 			log.Errorf("%v", err)

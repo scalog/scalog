@@ -31,7 +31,11 @@ func (p *DefaultShardingPolicy) Shard(view *disc.View, record string) (int32, in
 	if s, ok := view.Shards[p.shardID]; ok && s {
 		return p.shardID, p.replicaID
 	}
-	rs := rand.New(p.seed).Intn(len(view.LiveShards))
+	numLiveShards := len(view.LiveShards)
+	if numLiveShards < 1 {
+		return -1, -1
+	}
+	rs := rand.New(p.seed).Intn(numLiveShards)
 	rr := int32(rand.New(p.seed).Intn(int(p.numReplica)))
 	p.shardID = view.LiveShards[rs]
 	p.replicaID = rr

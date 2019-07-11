@@ -188,6 +188,9 @@ func (s *OrderServer) processReport() {
 // proposeCommit broadcasts entries in commitC to all subCs.
 func (s *OrderServer) processCommit() {
 	for e := range s.commitC {
+		if s.isLeader {
+			log.Debugf("%v", e)
+		}
 		s.subCMu.RLock()
 		for _, c := range s.subC {
 			c <- e

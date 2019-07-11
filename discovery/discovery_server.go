@@ -97,6 +97,7 @@ func (server *DiscoveryServer) subscribe() {
 			server.UpdateOrder()
 			continue
 		}
+		log.Debugf("Disc: %v", entry)
 		// check if there is any update on view
 		server.viewMu.Lock()
 		if entry.ViewID == server.viewID {
@@ -126,6 +127,7 @@ func (server *DiscoveryServer) subscribe() {
 		server.viewMu.Unlock()
 		// get view in discpb.View format
 		view := server.getView()
+		log.Debugf("Disc: %v", view)
 		// send the view through viewC channels
 		server.viewCMu.Lock()
 		for _, vc := range server.viewC {

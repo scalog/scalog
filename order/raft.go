@@ -79,8 +79,8 @@ func newRaftNode(id int, peers []string, join bool, getSnapshot func() ([]byte, 
 		id:          id,
 		peers:       peers,
 		join:        join,
-		waldir:      fmt.Sprintf("raftexample-%d", id),
-		snapdir:     fmt.Sprintf("raftexample-%d-snap", id),
+		waldir:      fmt.Sprintf("log/raftexample-%d", id),
+		snapdir:     fmt.Sprintf("log/raftexample-%d-snap", id),
 		getSnapshot: getSnapshot,
 		snapCount:   defaultSnapshotCount,
 		stopc:       make(chan struct{}),
@@ -186,7 +186,7 @@ func (rc *raftNode) loadSnapshot() *raftpb.Snapshot {
 // openWAL returns a WAL ready for reading.
 func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	if !wal.Exist(rc.waldir) {
-		if err := os.Mkdir(rc.waldir, 0750); err != nil {
+		if err := os.MkdirAll(rc.waldir, 0750); err != nil {
 			log.Fatalf("raftexample: cannot create dir for wal (%v)", err)
 		}
 
@@ -246,7 +246,7 @@ func (rc *raftNode) writeError(err error) {
 
 func (rc *raftNode) startRaft() {
 	if !fileutil.Exist(rc.snapdir) {
-		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
+		if err := os.MkdirAll(rc.snapdir, 0750); err != nil {
 			log.Fatalf("raftexample: cannot create dir for snapshot (%v)", err)
 		}
 	}

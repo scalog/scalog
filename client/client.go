@@ -13,6 +13,8 @@ import (
 	"github.com/scalog/scalog/discovery/discpb"
 	log "github.com/scalog/scalog/logger"
 	"github.com/scalog/scalog/pkg/address"
+
+	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 )
 
@@ -47,7 +49,12 @@ type Client struct {
 	dataAppendClientMu sync.Mutex
 }
 
-func NewClient(discAddr address.DiscAddr, dataAddr address.DataAddr, numReplica int32) (*Client, error) {
+func NewClient() (*Client, error) {
+	numReplica := int32(viper.GetInt("data-replication-factor"))
+	discPort := uint16(viper.GetInt("disc-port"))
+	discAddr := address.NewLocalDiscAddr(discPort)
+	dataPort := uint16(viper.GetInt("data-port"))
+	dataAddr := address.NewLocalDataAddr(numReplica, dataPort)
 	c := &Client{
 		clientID:   generateClientID(),
 		numReplica: numReplica,
@@ -179,6 +186,7 @@ func (c *Client) Start() {
 
 func (c *Client) processView() {
 	for v := range c.viewC {
+		log.Debugf("Client: %v", v)
 		err := c.view.Update(v)
 		if err != nil {
 			log.Errorf("%v", err)
@@ -194,7 +202,7 @@ func (c *Client) processAppend() {
 			ClientSN: c.getNextClientSN(),
 			Record:   r.Record,
 		}
-		fmt.Printf("shard: %v, replica: %v\n", shard, replica)
+		log.Infof("shard: %v, replica: %v\n", shard, replica)
 		client, err := c.getDataAppendClient(shard, replica)
 		if err != nil {
 			log.Errorf("%v", err)
@@ -235,7 +243,7 @@ func (c *Client) AppendOne(record string) (int64, int32, error) {
 		Record:   record,
 	}
 	shard, replica := c.shardingPolicy.Shard(c.view, record)
-	fmt.Printf("shard: %v, replica: %v\n", shard, replica)
+	log.Infof("shard: %v, replica: %v\n", shard, replica)
 	conn, err := c.getDataServerConn(shard, replica)
 	if err != nil {
 		return 0, 0, err
