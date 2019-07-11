@@ -94,7 +94,13 @@ func (server *DiscoveryServer) subscribe() {
 		entry, err := (*server.orderClient).Recv()
 		if err != nil {
 			log.Errorf("%v", err)
-			server.UpdateOrder()
+			for {
+				err := server.UpdateOrder()
+				if err == nil {
+					break
+				}
+				time.Sleep(time.Millisecond)
+			}
 			continue
 		}
 		log.Debugf("Disc: %v", entry)
@@ -108,7 +114,13 @@ func (server *DiscoveryServer) subscribe() {
 		// make sure the view id change is incremental
 		if entry.ViewID-server.viewID != 1 {
 			log.Errorf("ViewID is not incremental: current %v, received %v", server.viewID, entry.ViewID)
-			server.UpdateOrder()
+			for {
+				err := server.UpdateOrder()
+				if err == nil {
+					break
+				}
+				time.Sleep(time.Millisecond)
+			}
 			continue
 		}
 		// update view stored as discovery server state

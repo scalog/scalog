@@ -31,7 +31,6 @@ type OrderServer struct {
 	subC             map[int32]chan *orderpb.CommittedEntry
 	subCMu           sync.RWMutex
 	prevCut          map[int32]int64
-	snapMu           sync.Mutex
 
 	rnConfChangeC      chan raftpb.ConfChange
 	rnProposeC         chan string
@@ -220,8 +219,4 @@ func (s *OrderServer) processRNCommit() {
 func (server *OrderServer) getSnapshot() ([]byte, error) {
 	b := make([]byte, 0)
 	return b, nil
-}
-
-// TODO
-func (server *OrderServer) attemptRecoverFromSnapshot() {
 }
