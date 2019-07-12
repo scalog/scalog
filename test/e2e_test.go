@@ -37,8 +37,6 @@ func TestEnd2End(t *testing.T) {
 	}
 	go disc.Start()
 	// start a client and run the test
-	// TODO if the sleep is short, data server won'e be able to connect to
-	// each other. Unknown reason.
 	time.Sleep(2 * time.Second)
 	cli, err := client.NewClient()
 	if err != nil {
