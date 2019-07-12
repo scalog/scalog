@@ -24,7 +24,7 @@ func TestEnd2End(t *testing.T) {
 	viper.AutomaticEnv()
 	err = viper.ReadInConfig()
 	if err != nil {
-		t.Errorf("read config file error")
+		t.Errorf("read config file error: %v", err)
 	}
 	// start servers
 	for i := 0; i < 3; i++ { // number of raft replicas
