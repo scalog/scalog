@@ -8,9 +8,9 @@ import (
 	"github.com/scalog/scalog/order/orderpb"
 )
 
-func (server *OrderServer) Report(stream orderpb.Order_ReportServer) error {
+func (s *OrderServer) Report(stream orderpb.Order_ReportServer) error {
 	done := make(chan struct{})
-	go server.respondToDataReplica(done, stream)
+	go s.respondToDataReplica(done, stream)
 	for {
 		select {
 		case <-done:
@@ -24,32 +24,32 @@ func (server *OrderServer) Report(stream orderpb.Order_ReportServer) error {
 				}
 				return err
 			}
-			server.forwardC <- req
+			s.forwardC <- req
 		}
 	}
 }
 
-func (server *OrderServer) respondToDataReplica(done chan struct{}, stream orderpb.Order_ReportServer) {
+func (s *OrderServer) respondToDataReplica(done chan struct{}, stream orderpb.Order_ReportServer) {
 	respC := make(chan *orderpb.CommittedEntry, 4096)
-	server.subCMu.Lock()
-	cid := server.clientID
-	server.clientID++
-	server.subC[cid] = respC
-	server.subCMu.Unlock()
+	s.subCMu.Lock()
+	cid := s.clientID
+	s.clientID++
+	s.subC[cid] = respC
+	s.subCMu.Unlock()
 	for {
 		select {
 		case <-done:
-			server.subCMu.Lock()
-			delete(server.subC, cid)
-			server.subCMu.Unlock()
+			s.subCMu.Lock()
+			delete(s.subC, cid)
+			s.subCMu.Unlock()
 			log.Infof("Client %v is closed", cid)
 			close(respC)
 			return
 		case resp := <-respC:
 			if err := stream.Send(resp); err != nil {
-				server.subCMu.Lock()
-				delete(server.subC, cid)
-				server.subCMu.Unlock()
+				s.subCMu.Lock()
+				delete(s.subC, cid)
+				s.subCMu.Unlock()
 				log.Infof("Client %v is closed", cid)
 				close(respC)
 				close(done)
@@ -59,7 +59,7 @@ func (server *OrderServer) respondToDataReplica(done chan struct{}, stream order
 	}
 }
 
-func (server *OrderServer) Forward(stream orderpb.Order_ForwardServer) error {
+func (s *OrderServer) Forward(stream orderpb.Order_ForwardServer) error {
 	for {
 		req, err := stream.Recv()
 		if err != nil {
@@ -68,11 +68,11 @@ func (server *OrderServer) Forward(stream orderpb.Order_ForwardServer) error {
 			}
 			return err
 		}
-		server.forwardC <- req
+		s.forwardC <- req
 	}
 }
 
-func (server *OrderServer) Finalize(ctx context.Context, req *orderpb.FinalizeEntry) (*orderpb.Empty, error) {
-	server.finalizeC <- req
+func (s *OrderServer) Finalize(ctx context.Context, req *orderpb.FinalizeEntry) (*orderpb.Empty, error) {
+	s.finalizeC <- req
 	return &orderpb.Empty{}, nil
 }

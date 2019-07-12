@@ -216,7 +216,7 @@ func (s *OrderServer) processRNCommit() {
 }
 
 // TODO
-func (server *OrderServer) getSnapshot() ([]byte, error) {
+func (s *OrderServer) getSnapshot() ([]byte, error) {
 	b := make([]byte, 0)
 	return b, nil
 }
