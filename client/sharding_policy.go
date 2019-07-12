@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"time"
 
-	disc "github.com/scalog/scalog/discovery"
+	"github.com/scalog/scalog/pkg/view"
 )
 
 type DefaultShardingPolicy struct {
@@ -24,7 +24,7 @@ func NewDefaultShardingPolicy(numReplica int32) *DefaultShardingPolicy {
 	return s
 }
 
-func (p *DefaultShardingPolicy) Shard(view *disc.View, record string) (int32, int32) {
+func (p *DefaultShardingPolicy) Shard(view *view.View, record string) (int32, int32) {
 	if view == nil {
 		return -1, -1
 	}

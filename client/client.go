@@ -9,17 +9,17 @@ import (
 	"time"
 
 	"github.com/scalog/scalog/data/datapb"
-	disc "github.com/scalog/scalog/discovery"
 	"github.com/scalog/scalog/discovery/discpb"
 	log "github.com/scalog/scalog/logger"
 	"github.com/scalog/scalog/pkg/address"
+	"github.com/scalog/scalog/pkg/view"
 
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 )
 
 type ShardingPolicy interface {
-	Shard(view *disc.View, record string) (int32, int32)
+	Shard(view *view.View, record string) (int32, int32)
 }
 
 // ShardingPolicy determines which records are appended to which shards.
@@ -30,7 +30,7 @@ type Client struct {
 	nextCSN        int32
 	nextGSN        int32
 	viewID         int32
-	view           *disc.View
+	view           *view.View
 	viewC          chan *discpb.View
 	appendC        chan *datapb.Record
 	ackC           chan *datapb.Ack
@@ -71,7 +71,7 @@ func NewClient() (*Client, error) {
 	c.subC = make(chan *datapb.Record, 4096)
 	c.dataConn = make(map[int32]*grpc.ClientConn)
 	c.dataAppendClient = make(map[int32]*datapb.Data_AppendClient)
-	c.view = disc.NewView()
+	c.view = view.NewView()
 	err := c.UpdateDiscovery()
 	if err != nil {
 		return nil, err
