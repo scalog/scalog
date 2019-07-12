@@ -7,22 +7,22 @@ import (
 	log "github.com/scalog/scalog/logger"
 )
 
-func (server *DiscoveryServer) Discover(empty *discpb.Empty, stream discpb.Discovery_DiscoverServer) error {
+func (s *DiscoveryServer) Discover(empty *discpb.Empty, stream discpb.Discovery_DiscoverServer) error {
 	viewC := make(chan *discpb.View, 4096)
-	server.viewCMu.Lock()
-	cid := server.clientID
-	server.viewC[cid] = viewC
-	server.clientID++
-	server.viewCMu.Unlock()
+	s.viewCMu.Lock()
+	cid := s.clientID
+	s.viewC[cid] = viewC
+	s.clientID++
+	s.viewCMu.Unlock()
 	// clean up before returning
 	defer func() {
-		server.viewCMu.Lock()
-		delete(server.viewC, cid)
+		s.viewCMu.Lock()
+		delete(s.viewC, cid)
 		close(viewC)
-		server.viewCMu.Unlock()
+		s.viewCMu.Unlock()
 	}()
 	// send new views to the client
-	v := server.getView()
+	v := s.getView()
 	err := stream.Send(v)
 	if err != nil {
 		if err == io.EOF {

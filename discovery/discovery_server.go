@@ -55,47 +55,47 @@ func NewDiscoveryServer(numReplica int32, orderAddr address.OrderAddr) *Discover
 	return ds
 }
 
-func (server *DiscoveryServer) Start() {
-	go server.subscribe()
+func (s *DiscoveryServer) Start() {
+	go s.subscribe()
 }
 
-func (server *DiscoveryServer) UpdateOrderAddr(addr string) error {
-	server.orderMu.Lock()
-	defer server.orderMu.Unlock()
-	if server.orderConn != nil {
-		server.orderConn.Close()
-		server.orderConn = nil
+func (s *DiscoveryServer) UpdateOrderAddr(addr string) error {
+	s.orderMu.Lock()
+	defer s.orderMu.Unlock()
+	if s.orderConn != nil {
+		s.orderConn.Close()
+		s.orderConn = nil
 	}
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
 		return fmt.Errorf("Dial peer %v failed: %v", addr, err)
 	}
-	server.orderConn = conn
+	s.orderConn = conn
 	orderClient := orderpb.NewOrderClient(conn)
 	orderReportClient, err := orderClient.Report(context.Background())
 	if err != nil {
 		return fmt.Errorf("Create replicate client to %v failed: %v", addr, err)
 	}
-	server.orderClient = &orderReportClient
+	s.orderClient = &orderReportClient
 	return nil
 }
 
-func (server *DiscoveryServer) UpdateOrder() error {
-	addr := server.orderAddr.Get()
+func (s *DiscoveryServer) UpdateOrder() error {
+	addr := s.orderAddr.Get()
 	if len(addr) == 0 {
 		return fmt.Errorf("Wrong order-addr format: %v", addr)
 	}
-	return server.UpdateOrderAddr(addr)
+	return s.UpdateOrderAddr(addr)
 }
 
-func (server *DiscoveryServer) subscribe() {
+func (s *DiscoveryServer) subscribe() {
 	for {
-		entry, err := (*server.orderClient).Recv()
+		entry, err := (*s.orderClient).Recv()
 		if err != nil {
 			log.Errorf("%v", err)
 			for {
-				err := server.UpdateOrder()
+				err := s.UpdateOrder()
 				if err == nil {
 					break
 				}
@@ -105,17 +105,17 @@ func (server *DiscoveryServer) subscribe() {
 		}
 		log.Debugf("Disc: %v", entry)
 		// check if there is any update on view
-		server.viewMu.Lock()
-		if entry.ViewID == server.viewID {
-			server.viewMu.Unlock()
+		s.viewMu.Lock()
+		if entry.ViewID == s.viewID {
+			s.viewMu.Unlock()
 			continue
 		}
-		server.viewMu.Unlock()
+		s.viewMu.Unlock()
 		// make sure the view id change is incremental
-		if entry.ViewID-server.viewID != 1 {
-			log.Errorf("ViewID is not incremental: current %v, received %v", server.viewID, entry.ViewID)
+		if entry.ViewID-s.viewID != 1 {
+			log.Errorf("ViewID is not incremental: current %v, received %v", s.viewID, entry.ViewID)
 			for {
-				err := server.UpdateOrder()
+				err := s.UpdateOrder()
 				if err == nil {
 					break
 				}
@@ -124,44 +124,44 @@ func (server *DiscoveryServer) subscribe() {
 			continue
 		}
 		// update view stored as discovery server state
-		server.viewMu.Lock()
-		server.viewID = entry.ViewID
+		s.viewMu.Lock()
+		s.viewID = entry.ViewID
 		if entry.CommittedCut != nil {
-			for s := range entry.CommittedCut.Cut {
-				server.shards[s/server.numReplica] = true
+			for c := range entry.CommittedCut.Cut {
+				s.shards[c/s.numReplica] = true
 			}
 		}
 		if entry.FinalizeShards != nil {
-			for _, s := range entry.FinalizeShards.ShardIDs {
-				server.shards[s] = false
+			for _, sid := range entry.FinalizeShards.ShardIDs {
+				s.shards[sid] = false
 			}
 		}
-		server.viewMu.Unlock()
+		s.viewMu.Unlock()
 		// get view in discpb.View format
-		view := server.getView()
+		view := s.getView()
 		log.Debugf("Disc: %v", view)
 		// send the view through viewC channels
-		server.viewCMu.Lock()
-		for _, vc := range server.viewC {
+		s.viewCMu.Lock()
+		for _, vc := range s.viewC {
 			vc <- view
 		}
-		server.viewCMu.Unlock()
+		s.viewCMu.Unlock()
 	}
 }
 
-func (server *DiscoveryServer) getView() *discpb.View {
-	view := &discpb.View{ViewID: server.viewID}
+func (s *DiscoveryServer) getView() *discpb.View {
+	view := &discpb.View{ViewID: s.viewID}
 	liveShards := make([]int32, 0)
 	finalizedShards := make([]int32, 0)
-	server.viewMu.Lock()
-	for s, o := range server.shards {
+	s.viewMu.Lock()
+	for sid, o := range s.shards {
 		if o {
-			liveShards = append(liveShards, s)
+			liveShards = append(liveShards, sid)
 		} else {
-			finalizedShards = append(finalizedShards, s)
+			finalizedShards = append(finalizedShards, sid)
 		}
 	}
-	server.viewMu.Unlock()
+	s.viewMu.Unlock()
 	view.LiveShards = liveShards
 	view.FinalizedShards = finalizedShards
 	return view
