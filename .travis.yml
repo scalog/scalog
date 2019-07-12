@@ -3,7 +3,9 @@ go:
   - 1.12.x
   - 1.10.x
   - tip
-script: go build
+script:
+  - go build ./...
+  - go test -race -coverprofile=coverage.txt -covermode=atomic ./...
 branches:
   only:
   - master

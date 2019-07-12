@@ -23,3 +23,4 @@ scalog
 tmp
 storage-*
 raftexample-*
+coverage.txt
