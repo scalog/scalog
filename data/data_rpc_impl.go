@@ -8,7 +8,7 @@ import (
 	log "github.com/scalog/scalog/logger"
 )
 
-func (server *DataServer) Append(stream datapb.Data_AppendServer) error {
+func (s *DataServer) Append(stream datapb.Data_AppendServer) error {
 	initialized := false
 	done := make(chan struct{})
 	for {
@@ -26,30 +26,30 @@ func (server *DataServer) Append(stream datapb.Data_AppendServer) error {
 			}
 			if !initialized {
 				cid := record.ClientID
-				go server.respondToClient(cid, done, stream)
+				go s.respondToClient(cid, done, stream)
 				initialized = true
 			}
-			server.appendC <- record
+			s.appendC <- record
 
 		}
 	}
 }
 
-func (server *DataServer) AppendOne(ctx context.Context, record *datapb.Record) (*datapb.Ack, error) {
-	server.appendC <- record
-	ack := server.WaitForAck(record.ClientID, record.ClientSN)
+func (s *DataServer) AppendOne(ctx context.Context, record *datapb.Record) (*datapb.Ack, error) {
+	s.appendC <- record
+	ack := s.WaitForAck(record.ClientID, record.ClientSN)
 	return ack, nil
 }
 
-func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream datapb.Data_AppendServer) {
+func (s *DataServer) respondToClient(cid int32, done chan struct{}, stream datapb.Data_AppendServer) {
 	ackSendC := make(chan *datapb.Ack, 4096)
-	server.ackSendCMu.Lock()
-	server.ackSendC[cid] = ackSendC
-	server.ackSendCMu.Unlock()
+	s.ackSendCMu.Lock()
+	s.ackSendC[cid] = ackSendC
+	s.ackSendCMu.Unlock()
 	defer func() {
-		server.ackSendCMu.Lock()
-		delete(server.ackSendC, cid)
-		server.ackSendCMu.Unlock()
+		s.ackSendCMu.Lock()
+		delete(s.ackSendC, cid)
+		s.ackSendCMu.Unlock()
 		log.Infof("Client %v is closed", cid)
 		close(ackSendC)
 	}()
@@ -66,7 +66,7 @@ func (server *DataServer) respondToClient(cid int32, done chan struct{}, stream 
 	}
 }
 
-func (server *DataServer) Replicate(stream datapb.Data_ReplicateServer) error {
+func (s *DataServer) Replicate(stream datapb.Data_ReplicateServer) error {
 	for {
 		record, err := stream.Recv()
 		if err != nil {
@@ -75,42 +75,42 @@ func (server *DataServer) Replicate(stream datapb.Data_ReplicateServer) error {
 			}
 			return err
 		}
-		server.replicateC <- record
+		s.replicateC <- record
 	}
 }
 
 // TODO implement the trim operation
-func (server *DataServer) Trim(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Ack, error) {
+func (s *DataServer) Trim(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Ack, error) {
 	return &datapb.Ack{}, nil
 }
 
-func (server *DataServer) Read(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Record, error) {
-	r, err := server.storage.Read(gsn.GSN)
+func (s *DataServer) Read(ctx context.Context, gsn *datapb.GlobalSN) (*datapb.Record, error) {
+	r, err := s.storage.Read(gsn.GSN)
 	if err != nil {
 		return &datapb.Record{}, nil
 	}
 	record := &datapb.Record{
 		GlobalSN:       gsn.GSN,
-		ShardID:        server.shardID,
+		ShardID:        s.shardID,
 		LocalReplicaID: 0, // TODO figure out local replica id
-		ViewID:         server.viewID,
+		ViewID:         s.viewID,
 		Record:         r,
 	}
 	return record, nil
 }
 
-func (server *DataServer) Subscribe(gsn *datapb.GlobalSN, stream datapb.Data_SubscribeServer) error {
+func (s *DataServer) Subscribe(gsn *datapb.GlobalSN, stream datapb.Data_SubscribeServer) error {
 	subC := make(chan *datapb.Record, 4096)
-	server.subCMu.Lock()
-	cid := server.clientID
-	server.clientID++
-	server.subC[cid] = subC
-	server.subCMu.Unlock()
+	s.subCMu.Lock()
+	cid := s.clientID
+	s.clientID++
+	s.subC[cid] = subC
+	s.subCMu.Unlock()
 	for sub := range subC {
 		if err := stream.Send(sub); err != nil {
-			server.subCMu.Lock()
-			delete(server.subC, cid)
-			server.subCMu.Unlock()
+			s.subCMu.Lock()
+			delete(s.subC, cid)
+			s.subCMu.Unlock()
 			log.Infof("Client %v is closed", cid)
 			close(subC)
 			return err
