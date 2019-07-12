@@ -28,7 +28,8 @@ func (p *DefaultShardingPolicy) Shard(view *disc.View, record string) (int32, in
 	if view == nil {
 		return -1, -1
 	}
-	if s, ok := view.Shards[p.shardID]; ok && s {
+	s, err := view.Get(p.shardID)
+	if err == nil && s {
 		return p.shardID, p.replicaID
 	}
 	numLiveShards := len(view.LiveShards)

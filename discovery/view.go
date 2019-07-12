@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/scalog/scalog/discovery/discpb"
 )
@@ -11,6 +12,7 @@ type View struct {
 	Shards          map[int32]bool
 	LiveShards      []int32
 	FinalizedShards []int32
+	mu              sync.RWMutex
 }
 
 func NewView() *View {
@@ -23,7 +25,18 @@ func NewView() *View {
 
 }
 
+func (v *View) Get(sid int32) (bool, error) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	if s, ok := v.Shards[sid]; ok {
+		return s, nil
+	}
+	return false, fmt.Errorf("shard %v doesn't exist", sid)
+}
+
 func (v *View) Update(view *discpb.View) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	v.ViewID = view.ViewID
 	v.Shards = make(map[int32]bool)
 	v.LiveShards = view.LiveShards
@@ -38,6 +51,8 @@ func (v *View) Update(view *discpb.View) error {
 }
 
 func (v *View) Finalize(shards ...int32) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// check to make sure shard exist
 	for _, s := range shards {
 		if _, ok := v.Shards[s]; !ok {
@@ -65,6 +80,8 @@ func (v *View) Finalize(shards ...int32) error {
 }
 
 func (v *View) Add(shards ...int32) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// check to make sure shard doesn't exist
 	for _, s := range shards {
 		if _, ok := v.Shards[s]; ok {
