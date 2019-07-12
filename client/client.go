@@ -14,7 +14,6 @@ import (
 	"github.com/scalog/scalog/pkg/address"
 	"github.com/scalog/scalog/pkg/view"
 
-	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 )
 
@@ -49,12 +48,7 @@ type Client struct {
 	dataAppendClientMu sync.Mutex
 }
 
-func NewClient() (*Client, error) {
-	numReplica := int32(viper.GetInt("data-replication-factor"))
-	discPort := uint16(viper.GetInt("disc-port"))
-	discAddr := address.NewLocalDiscAddr(discPort)
-	dataPort := uint16(viper.GetInt("data-port"))
-	dataAddr := address.NewLocalDataAddr(numReplica, dataPort)
+func NewClient(dataAddr address.DataAddr, discAddr address.DiscAddr, numReplica int32) (*Client, error) {
 	c := &Client{
 		clientID:   generateClientID(),
 		numReplica: numReplica,

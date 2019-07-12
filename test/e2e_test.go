@@ -9,6 +9,7 @@ import (
 	"github.com/scalog/scalog/data"
 	disc "github.com/scalog/scalog/discovery"
 	"github.com/scalog/scalog/order"
+	"github.com/scalog/scalog/pkg/address"
 
 	"github.com/spf13/viper"
 )
@@ -38,7 +39,12 @@ func TestEnd2End(t *testing.T) {
 	go disc.Start()
 	// start a client and run the test
 	time.Sleep(2 * time.Second)
-	cli, err := client.NewClient()
+	numReplica := int32(viper.GetInt("data-replication-factor"))
+	discPort := uint16(viper.GetInt("disc-port"))
+	discAddr := address.NewLocalDiscAddr(discPort)
+	dataPort := uint16(viper.GetInt("data-port"))
+	dataAddr := address.NewLocalDataAddr(numReplica, dataPort)
+	cli, err := client.NewClient(dataAddr, discAddr, numReplica)
 	if err != nil {
 		t.Errorf("create client failure: %v", err)
 	}

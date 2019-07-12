@@ -7,6 +7,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/scalog/scalog/pkg/address"
+
+	"github.com/spf13/viper"
 )
 
 type It struct {
@@ -14,7 +18,12 @@ type It struct {
 }
 
 func NewIt() (*It, error) {
-	client, err := NewClient()
+	numReplica := int32(viper.GetInt("data-replication-factor"))
+	discPort := uint16(viper.GetInt("disc-port"))
+	discAddr := address.NewLocalDiscAddr(discPort)
+	dataPort := uint16(viper.GetInt("data-port"))
+	dataAddr := address.NewLocalDataAddr(numReplica, dataPort)
+	client, err := NewClient(dataAddr, discAddr, numReplica)
 	if err != nil {
 		return nil, err
 	}
