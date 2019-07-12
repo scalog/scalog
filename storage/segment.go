@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"sync"
 )
 
 const (
@@ -23,6 +24,7 @@ type Segment struct {
 	logFile *os.File
 	lsnMap  map[int32]int32
 	gsnMap  map[int32]int32
+	mapMu   sync.RWMutex
 
 	t []byte // metadata: reuse this across the lifetime of the segment
 	b []byte // record: reuse this across the lifetime of the segment
@@ -70,6 +72,8 @@ func RecoverSegment(path string, BaseLSN int64) (*Segment, error) {
 
 // loadLog reads the log file and reconstruct content for ssnFile and gsnFile
 func (s *Segment) loadLog() error {
+	s.mapMu.Lock()
+	defer s.mapMu.Unlock()
 	// if gsn file exists, load it
 	gsnPath := fmt.Sprintf("%v/%v.gsn", s.path, s.BaseLSN)
 	if _, err := os.Stat(gsnPath); err == nil {
@@ -131,6 +135,8 @@ func (s *Segment) loadLog() error {
 }
 
 func (s *Segment) Write(record string) (int32, error) {
+	s.mapMu.Lock()
+	defer s.mapMu.Unlock()
 	if s.closed {
 		return 0, fmt.Errorf("Segment closed")
 	}
@@ -154,6 +160,8 @@ func (s *Segment) Write(record string) (int32, error) {
 }
 
 func (s *Segment) Assign(ssn, length int32, gsn int64) error {
+	s.mapMu.Lock()
+	defer s.mapMu.Unlock()
 	if s.closed {
 		return fmt.Errorf("Segment closed")
 	}
@@ -196,6 +204,8 @@ func writeMapToDisk(f string, m map[int32]int32) error {
 }
 
 func (s *Segment) Close() error {
+	s.mapMu.Lock()
+	defer s.mapMu.Unlock()
 	if s.closed {
 		return fmt.Errorf("Segment closed")
 	}
@@ -222,12 +232,17 @@ func (s *Segment) Read(gsn int64) (string, error) {
 }
 
 func (s *Segment) ReadLSN(lsn int64) (string, error) {
+	s.mapMu.RLock()
 	pos := s.lsnMap[int32(lsn-s.BaseLSN)]
+	s.mapMu.RUnlock()
 	return s.ReadPos(int64(pos))
 }
 
 func (s *Segment) ReadGSN(gsn int64) (string, error) {
-	if pos, ok := s.gsnMap[int32(gsn-s.BaseGSN)]; ok {
+	s.mapMu.RLock()
+	pos, ok := s.gsnMap[int32(gsn-s.BaseGSN)]
+	s.mapMu.RUnlock()
+	if ok {
 		return s.ReadPos(int64(pos))
 	} else {
 		return "", fmt.Errorf("GSN %v doesn't exist", gsn)
