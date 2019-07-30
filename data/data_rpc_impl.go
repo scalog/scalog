@@ -20,8 +20,10 @@ func (s *DataServer) Append(stream datapb.Data_AppendServer) error {
 			if err != nil {
 				close(done)
 				if err == io.EOF {
+					log.Infof("Receive append stream closed.")
 					return nil
 				}
+				log.Errorf("Receive append error: %v", err)
 				return err
 			}
 			if !initialized {
@@ -71,8 +73,10 @@ func (s *DataServer) Replicate(stream datapb.Data_ReplicateServer) error {
 		record, err := stream.Recv()
 		if err != nil {
 			if err == io.EOF {
+				log.Infof("Receive replicate stream closed.")
 				return nil
 			}
+			log.Errorf("Receive replicate error: %v", err)
 			return err
 		}
 		s.replicateC <- record
