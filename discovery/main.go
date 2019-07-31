@@ -34,9 +34,11 @@ func Start() {
 			MaxConnectionIdle: 5 * time.Minute,
 		}),
 	)
-	// health server
+	// server should register all the services manually
+	// use empty service name for all scalog services' health status,
+	// see https://github.com/grpc/grpc/blob/master/doc/health-checking.md for more
 	healthServer := health.NewServer()
-	healthServer.Resume()
+	healthServer.SetServingStatus("", healthgrpc.HealthCheckResponse_SERVING)
 	healthgrpc.RegisterHealthServer(grpcServer, healthServer)
 	// order server
 	server := NewDiscoveryServer(numReplica, localOrderAddr)
