@@ -31,6 +31,43 @@ func NewIt() (*It, error) {
 	return it, nil
 }
 
+func NewK8sIt() (*It, error) {
+	numReplica := int32(viper.GetInt("data-replication-factor"))
+	discPort := uint16(viper.GetInt("disc-port"))
+	discAddr := address.NewK8sDiscAddr(discPort)
+	dataPort := uint16(viper.GetInt("data-port"))
+	dataAddr := address.NewK8sDataAddr(dataPort)
+	client, err := NewClient(dataAddr, discAddr, numReplica)
+	if err != nil {
+		return nil, err
+	}
+	it := &It{client}
+	return it, nil
+}
+
+func (it *It) Test() {
+	record := "hello"
+	gsn, sid, err := it.client.AppendOne(record)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "write record failure: %v", err)
+	}
+	if gsn < 0 {
+		fmt.Fprintf(os.Stderr, "error global sequence number (should be non-negative): %v", gsn)
+	}
+	if sid < 0 {
+		fmt.Fprintf(os.Stderr, "error shard (should be non-negative): %v", sid)
+	}
+	rid := int32(0)
+	rec, err := it.client.Read(gsn, sid, rid)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "read record failure: %v", err)
+	}
+	if rec != record {
+		fmt.Fprintf(os.Stderr, "read different from write: %v vs %v", rec, record)
+	}
+	fmt.Fprintf(os.Stderr, "client test completed")
+}
+
 func (it *It) Start() {
 	regex := regexp.MustCompile(" +")
 	reader := bufio.NewReader(os.Stdin)
