@@ -42,12 +42,12 @@ func NewDiscoveryServer(numReplica int32, orderAddr address.OrderAddr) *Discover
 		orderAddr:  orderAddr,
 	}
 	var err error
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		err = ds.UpdateOrder()
 		if err == nil {
 			break
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Second)
 	}
 	if err != nil {
 		return nil
