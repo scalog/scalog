@@ -5,7 +5,7 @@ import (
 )
 
 func K8sOrderLeaderDomain() string {
-	return "dns:///leader.order.scalog"
+	return "dns:///scalog-order-service.scalog"
 }
 
 func K8sOrderLeaderAddr(port uint16) string {
@@ -13,7 +13,7 @@ func K8sOrderLeaderAddr(port uint16) string {
 }
 
 func K8sDataServerDomain(sid, rid int32) string {
-	return fmt.Sprintf("dns:///%v-%v.data.scalog", sid, rid)
+	return fmt.Sprintf("dns:///scalog-exposed-data-service-scalog-data-shard-%v-%v.scalog", sid, rid)
 }
 
 func K8sDataServerAddr(sid, rid int32, port uint16) string {
@@ -21,7 +21,7 @@ func K8sDataServerAddr(sid, rid int32, port uint16) string {
 }
 
 func K8sDiscLeaderDomain() string {
-	return "dns:///service.disc.scalog"
+	return "dns:///scalog-discovery-service.scalog"
 }
 
 func K8sDiscLeaderAddr(port uint16) string {
