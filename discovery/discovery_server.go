@@ -47,6 +47,7 @@ func NewDiscoveryServer(numReplica int32, orderAddr address.OrderAddr) *Discover
 		if err == nil {
 			break
 		}
+		log.Warningf("%v", err)
 		time.Sleep(time.Second)
 	}
 	if err != nil {
