@@ -75,4 +75,7 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		log.Printf("Using config file: %v", viper.ConfigFileUsed())
 	}
+
+	// Bind name space for k8s deployment
+	viper.BindEnv("namespace")
 }

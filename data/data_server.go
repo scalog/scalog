@@ -12,8 +12,8 @@ import (
 	"github.com/scalog/scalog/order/orderpb"
 	"github.com/scalog/scalog/pkg/address"
 	"github.com/scalog/scalog/storage"
-
 	"google.golang.org/grpc"
+	"k8s.io/client-go/kubernetes"
 )
 
 type DataServer struct {
@@ -48,7 +48,8 @@ type DataServer struct {
 	subC           map[int32]chan *datapb.Record
 	subCMu         sync.RWMutex
 
-	storage *storage.Storage
+	storage    *storage.Storage
+	kubeClient *kubernetes.Clientset
 
 	wait   map[int64]chan *datapb.Ack
 	waitMu sync.RWMutex
@@ -100,12 +101,12 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 			s.replicateSendC[i] = make(chan *datapb.Record, 4096)
 		}
 	}
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		err = s.UpdateOrder()
 		if err == nil {
 			break
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Second)
 	}
 	if err != nil {
 		log.Errorf("%v", err)
@@ -120,7 +121,7 @@ func (s *DataServer) UpdateOrderAddr(addr string) error {
 	if s.orderConn != nil {
 		s.orderConn.Close()
 	}
-	opts := []grpc.DialOption{grpc.WithInsecure()}
+	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithBlock()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
 		return fmt.Errorf("Dial peer %v failed: %v", addr, err)
@@ -168,7 +169,7 @@ func (s *DataServer) ConnPeers() error {
 }
 
 func (s *DataServer) Start() {
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		err := s.ConnPeers()
 		if err != nil {
 			log.Errorf("%v", err)
@@ -200,15 +201,15 @@ func (s *DataServer) connectToPeer(peer int32) error {
 		s.peerDoneC[peer] = nil
 	}
 	// build connections to peers
-	opts := []grpc.DialOption{grpc.WithInsecure()}
+	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithBlock()}
 	var conn *grpc.ClientConn
 	var err error
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		conn, err = grpc.Dial(s.dataAddr.Get(s.shardID, peer), opts...)
 		if err == nil {
 			break
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Second)
 	}
 	if err != nil {
 		return fmt.Errorf("Dial peer %v failed: %v", s.dataAddr.Get(s.shardID, peer), err)

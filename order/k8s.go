@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/keepalive"
 )
 
 func StartK8s() {
@@ -45,11 +44,7 @@ func StartK8s() {
 	if err != nil {
 		log.Fatalf("Failed to listen to port %v: %v", port, err)
 	}
-	grpcServer := grpc.NewServer(
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			MaxConnectionIdle: 5 * time.Minute,
-		}),
-	)
+	grpcServer := grpc.NewServer()
 	// server should register all the services manually
 	// use empty service name for all scalog services' health status,
 	// see https://github.com/grpc/grpc/blob/master/doc/health-checking.md for more
