@@ -113,30 +113,33 @@ func (s *OrderServer) computeCutDiff(pcut, ccut map[int32]int64) int64 {
 func (s *OrderServer) computeCommittedCut(lcs map[int32]*orderpb.LocalCut) map[int32]int64 {
 	incrViewID := false
 	// add new live shards
-	for shard := range lcs {
+	for rid := range lcs {
+		shard := rid / s.dataNumReplica
 		if _, ok := s.shards[shard]; !ok {
 			incrViewID = true
 			s.shards[shard] = true
 		}
 	}
 	ccut := make(map[int32]int64)
-	for shard, status := range s.shards {
+	for rid := range lcs {
+		shard := rid / s.dataNumReplica
+		status := s.shards[shard]
 		// check if the shard is finialized
 		if !status {
 			incrViewID = true
 			// clean finalized shards from lcs
-			delete(lcs, shard)
+			delete(lcs, rid)
 			continue
 		}
-		localReplicaID := shard % s.dataNumReplica
-		begin := shard - localReplicaID
+		localReplicaID := rid % s.dataNumReplica
+		begin := rid - localReplicaID
 		min := int64(math.MaxInt64)
 		for i := int32(0); i < s.dataNumReplica; i++ {
 			if min > lcs[begin+i].Cut[localReplicaID] {
 				min = lcs[begin+i].Cut[localReplicaID]
 			}
 		}
-		ccut[shard] = min
+		ccut[rid] = min
 	}
 	if incrViewID {
 		atomic.AddInt32(&s.viewID, 1)

@@ -31,7 +31,7 @@ func TestEnd2End(t *testing.T) {
 	for i := 0; i < 3; i++ { // number of raft replicas
 		go order.StartOrder(int32(i))
 	}
-	for i := 0; i < 1; i++ { // number of shards
+	for i := 0; i < 2; i++ { // number of shards
 		for j := 0; j < 2; j++ { // number of replicas in each shard
 			go data.StartData(int32(i), int32(j))
 		}
