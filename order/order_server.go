@@ -135,8 +135,12 @@ func (s *OrderServer) computeCommittedCut(lcs map[int32]*orderpb.LocalCut) map[i
 		begin := rid - localReplicaID
 		min := int64(math.MaxInt64)
 		for i := int32(0); i < s.dataNumReplica; i++ {
-			if min > lcs[begin+i].Cut[localReplicaID] {
-				min = lcs[begin+i].Cut[localReplicaID]
+			if cut, ok := lcs[begin+i]; ok {
+				if min > cut.Cut[localReplicaID] {
+					min = cut.Cut[localReplicaID]
+				}
+			} else {
+				min = int64(0)
 			}
 		}
 		ccut[rid] = min
@@ -159,9 +163,9 @@ func (s *OrderServer) processReport() {
 					id := lc.ShardID*s.dataNumReplica + lc.LocalReplicaID
 					valid := true
 					// check if the received cut is up-to-date
-					if _, ok := lcs[id]; ok {
+					if cut, ok := lcs[id]; ok {
 						for i := int32(0); i < s.dataNumReplica; i++ {
-							if lc.Cut[i] < lcs[id].Cut[i] {
+							if lc.Cut[i] < cut.Cut[i] {
 								valid = false
 							}
 						}
