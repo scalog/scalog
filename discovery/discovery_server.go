@@ -113,14 +113,14 @@ func (s *DiscoveryServer) subscribe() {
 		}
 		s.viewMu.Unlock()
 		// make sure the view id change is incremental
-		if entry.ViewID-s.viewID != 1 {
+		if s.viewID >= 0 && entry.ViewID-s.viewID != 1 {
 			log.Errorf("ViewID is not incremental: current %v, received %v", s.viewID, entry.ViewID)
-			for {
+			for { // TODO: the failure handling should be polished
 				err := s.UpdateOrder()
 				if err == nil {
 					break
 				}
-				time.Sleep(time.Millisecond)
+				time.Sleep(time.Second)
 			}
 			continue
 		}
