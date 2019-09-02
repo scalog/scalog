@@ -244,9 +244,8 @@ func (s *Segment) ReadGSN(gsn int64) (string, error) {
 	s.mapMu.RUnlock()
 	if ok {
 		return s.ReadPos(int64(pos))
-	} else {
-		return "", fmt.Errorf("GSN %v doesn't exist", gsn)
 	}
+	return "", fmt.Errorf("GSN %v doesn't exist", gsn)
 }
 
 func (s *Segment) ReadPos(pos int64) (string, error) {
