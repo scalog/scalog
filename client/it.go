@@ -20,40 +20,15 @@ type It struct {
 func NewIt() (*It, error) {
 	numReplica := int32(viper.GetInt("data-replication-factor"))
 	discPort := uint16(viper.GetInt("disc-port"))
-	// discAddr := address.NewLocalDiscAddr(discPort)
-	discAddr := address.NewK8sDiscAddr(discPort)
+	discAddr := address.NewLocalDiscAddr(discPort)
 	dataPort := uint16(viper.GetInt("data-port"))
-	// dataAddr := address.NewLocalDataAddr(numReplica, dataPort)
-	dataAddr := address.NewK8sDataAddr(dataPort)
+	dataAddr := address.NewLocalDataAddr(numReplica, dataPort)
 	client, err := NewClient(dataAddr, discAddr, numReplica)
 	if err != nil {
 		return nil, err
 	}
 	it := &It{client}
 	return it, nil
-}
-
-func (it *It) Test() {
-	record := "hello"
-	gsn, sid, err := it.client.AppendOne(record)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "write record failure: %v", err)
-	}
-	if gsn < 0 {
-		fmt.Fprintln(os.Stderr, "error global sequence number (should be non-negative): %v", gsn)
-	}
-	if sid < 0 {
-		fmt.Fprintln(os.Stderr, "error shard (should be non-negative): %v", sid)
-	}
-	rid := int32(0)
-	rec, err := it.client.Read(gsn, sid, rid)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "read record failure: %v", err)
-	}
-	if rec != record {
-		fmt.Fprintln(os.Stderr, "read different from write: %v vs %v", rec, record)
-	}
-	fmt.Fprintln(os.Stderr, "client test completed")
 }
 
 
