@@ -158,6 +158,7 @@ func (s *OrderServer) processReport() {
 	for {
 		select {
 		case e := <-s.forwardC:
+			log.Debugf("processReport forwardC")
 			if s.isLeader { // store local cuts
 				for _, lc := range e.Cuts {
 					id := lc.ShardID*s.dataNumReplica + lc.LocalReplicaID
@@ -176,9 +177,11 @@ func (s *OrderServer) processReport() {
 				}
 			} else {
 				// TODO: forward to the leader
+				log.Debugf("Cuts forward to the leader")
 			}
 		case <-ticker.C:
 			// TODO: check to make sure the key in lcs exist
+			log.Debugf("processReport ticker")
 			if s.isLeader { // compute committedCut
 				ccut := s.computeCommittedCut(lcs)
 				vid := atomic.LoadInt32(&s.viewID)

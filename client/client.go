@@ -104,7 +104,7 @@ func (c *Client) UpdateDiscoveryAddr(addr string) error {
 		c.discConn.Close()
 		c.discConn = nil
 	}
-	opts := []grpc.DialOption{grpc.WithInsecure()}
+	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithBlock()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
 		return fmt.Errorf("Dial discovery at %v failed: %v", addr, err)
@@ -117,6 +117,17 @@ func (c *Client) UpdateDiscoveryAddr(addr string) error {
 		return fmt.Errorf("Create replicate client to %v failed: %v", addr, err)
 	}
 	c.discClient = &discDiscoveryClient
+
+	v, err := (*c.discClient).Recv()
+	if err != nil {
+		log.Errorf("%v", err)
+	}
+	log.Debugf("Discovery updating view: %v", v)
+	err = c.view.Update(v)
+	if err != nil {
+		log.Errorf("%v", err)
+	}
+
 	return nil
 }
 
@@ -128,7 +139,7 @@ func (c *Client) connDataServer(shard, replica int32) (*grpc.ClientConn, error) 
 		c.dataConn[globalReplicaID].Close()
 		delete(c.dataConn, globalReplicaID)
 	}
-	opts := []grpc.DialOption{grpc.WithInsecure()}
+	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithBlock()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("Dial data server at %v failed: %v", addr, err)
