@@ -30,8 +30,7 @@ func StartK8s() {
 	if err != nil {
 		log.Fatalf("Failed to parse ordering-batching-interval: %v", err)
 	}
-	basePort := uint16(viper.GetInt("data-port"))
-	port := basePort + uint16(sid*numReplica+rid)
+	port := uint16(viper.GetInt("data-port"))
 	orderPort := uint16(viper.GetInt("order-port"))
 	// print log
 	log.Infof("%v: %v", "sid", sid)
@@ -41,7 +40,7 @@ func StartK8s() {
 	log.Infof("%v: %v", "data-port", port)
 	// get ordering layer
 	k8sOrderAddr := address.NewK8sOrderAddr(orderPort)
-	k8sDataAddr := address.NewK8sDataAddr(basePort)
+	k8sDataAddr := address.NewK8sDataAddr(port)
 	// listen to the port
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {

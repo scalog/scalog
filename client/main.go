@@ -10,6 +10,5 @@ func Start() {
 		log.Fatalf("%v", err)
 		return
 	}
-	it.Test()
 	it.Start()
 }
