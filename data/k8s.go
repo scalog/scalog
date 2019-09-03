@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"strings"
+	"strconv"
 
 	"github.com/scalog/scalog/data/datapb"
 	log "github.com/scalog/scalog/logger"
@@ -17,6 +19,10 @@ import (
 
 func StartK8s() {
 	// read configuration
+	shardGroup, replicaID, shardID := parseDataPodName(viper.GetString("name"))
+	viper.Set("sid", shardID)
+	viper.Set("rid", replicaID)
+	viper.Set("shardGroup", shardGroup)
 	sid := int32(viper.GetInt("sid"))
 	rid := int32(viper.GetInt("rid"))
 	numReplica := int32(viper.GetInt("data-replication-factor"))
@@ -64,4 +70,20 @@ func StartK8s() {
 	for {
 		time.Sleep(time.Second)
 	}
+}
+
+func parseDataPodName(podName string) (string, int, int) {
+	splitPodName := strings.Split(podName, "-")
+	shardGroup := strings.Join(splitPodName[:len(splitPodName)-1], "-")
+	shardID, err := strconv.Atoi(splitPodName[len(splitPodName)-2])
+	if err != nil {
+		return "", -1, -1
+	}
+	replicaID, err := strconv.Atoi(splitPodName[len(splitPodName)-1])
+	if err != nil {
+		replicaID = -1
+		shardGroup = ""
+		shardID = -1
+	}
+	return shardGroup, replicaID, shardID
 }

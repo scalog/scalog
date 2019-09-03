@@ -5,7 +5,7 @@ import (
 )
 
 func K8sOrderLeaderDomain() string {
-	return "dns:///scalog-order-service.scalog"
+	return "dns:///scalog-order-leader-service.scalog"
 }
 
 func K8sOrderLeaderAddr(port uint16) string {
