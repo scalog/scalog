@@ -28,7 +28,7 @@ func StartK8s() {
 	numReplica := int32(viper.GetInt("data-replication-factor"))
 	batchingInterval, err := time.ParseDuration(viper.GetString("data-batching-interval"))
 	if err != nil {
-		log.Fatalf("Failed to parse ordering-batching-interval: %v", err)
+		log.Fatalf("Failed to parse data-batching-interval: %v", err)
 	}
 	port := uint16(viper.GetInt("data-port"))
 	orderPort := uint16(viper.GetInt("order-port"))
