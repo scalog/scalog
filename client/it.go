@@ -31,7 +31,6 @@ func NewIt() (*It, error) {
 	return it, nil
 }
 
-
 func NewK8sIt() (*It, error) {
 	numReplica := int32(viper.GetInt("data-replication-factor"))
 	discPort := uint16(viper.GetInt("disc-port"))
