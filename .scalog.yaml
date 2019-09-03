@@ -1,10 +1,10 @@
-order-port: 21024
-raft-port: 10088
+order-port: 26733
+raft-port: 27238
 order-replication-factor: 3
 order-batching-interval: 1000ms
 
-data-port: 21024
+data-port: 23282
 data-replication-factor: 2
 data-batching-interval: 1000ms
 
-disc-port: 21024
+disc-port: 23472
