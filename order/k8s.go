@@ -3,10 +3,10 @@ package order
 import (
 	"fmt"
 	"net"
-	"time"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/scalog/scalog/logger"
 	"github.com/scalog/scalog/order/orderpb"
@@ -66,7 +66,7 @@ func StartK8s() {
 	}
 }
 
-func parseOrderPodName(podName string) (int) {
+func parseOrderPodName(podName string) int {
 	splitPodName := strings.Split(podName, "-")
 	replicaID, err := strconv.Atoi(splitPodName[len(splitPodName)-1])
 	if err != nil {
@@ -81,7 +81,7 @@ type peerIDAndURL struct {
 	url string
 }
 
-func getRaftIndexPeerUrls() ([]string) {
+func getRaftIndexPeerUrls() []string {
 	pods := kube.GetShardPods(kube.InitKubernetesClient(), "app=scalog-order",
 		viper.GetInt("order-replication-factor"), viper.GetString("namespace"))
 

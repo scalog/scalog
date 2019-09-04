@@ -3,9 +3,9 @@ package data
 import (
 	"fmt"
 	"net"
-	"time"
-	"strings"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/scalog/scalog/data/datapb"
 	log "github.com/scalog/scalog/logger"
