@@ -28,7 +28,7 @@ RUN GRPC_HEALTH_PROBE_VERSION=v0.2.0 && \
 
 # Copy the Pre-built binary file from the previous stage
 COPY --from=builder /go/src/github.com/scalog/scalog/scalog /app/
-COPY --from=builder /go/src/github.com/scalog/scalog/.scalog.yaml /app/
+COPY --from=builder /go/src/github.com/scalog/scalog/.scalog.yaml /root/
 
 WORKDIR /app
 

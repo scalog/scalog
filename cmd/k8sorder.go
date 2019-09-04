@@ -20,5 +20,5 @@ var k8sorderCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(k8sorderCmd)
-	viper.BindEnv("oid")
+	viper.BindEnv("name")
 }

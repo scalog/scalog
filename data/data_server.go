@@ -106,6 +106,7 @@ func NewDataServer(replicaID, shardID, numReplica int32, batchingInterval time.D
 		if err == nil {
 			break
 		}
+		log.Warningf("%v", err)
 		time.Sleep(time.Second)
 	}
 	if err != nil {

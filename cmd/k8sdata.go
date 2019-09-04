@@ -20,6 +20,5 @@ var k8sdataCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(k8sdataCmd)
-	viper.BindEnv("sid")
-	viper.BindEnv("rid")
+	viper.BindEnv("name")
 }

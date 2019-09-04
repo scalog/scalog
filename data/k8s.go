@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"strings"
+	"strconv"
 
 	"github.com/scalog/scalog/data/datapb"
 	log "github.com/scalog/scalog/logger"
@@ -17,15 +19,18 @@ import (
 
 func StartK8s() {
 	// read configuration
+	shardGroup, replicaID, shardID := parseDataPodName(viper.GetString("name"))
+	viper.Set("sid", shardID)
+	viper.Set("rid", replicaID)
+	viper.Set("shardGroup", shardGroup)
 	sid := int32(viper.GetInt("sid"))
 	rid := int32(viper.GetInt("rid"))
 	numReplica := int32(viper.GetInt("data-replication-factor"))
 	batchingInterval, err := time.ParseDuration(viper.GetString("data-batching-interval"))
 	if err != nil {
-		log.Fatalf("Failed to parse ordering-batching-interval: %v", err)
+		log.Fatalf("Failed to parse data-batching-interval: %v", err)
 	}
-	basePort := uint16(viper.GetInt("data-port"))
-	port := basePort + uint16(sid*numReplica+rid)
+	port := uint16(viper.GetInt("data-port"))
 	orderPort := uint16(viper.GetInt("order-port"))
 	// print log
 	log.Infof("%v: %v", "sid", sid)
@@ -35,7 +40,7 @@ func StartK8s() {
 	log.Infof("%v: %v", "data-port", port)
 	// get ordering layer
 	k8sOrderAddr := address.NewK8sOrderAddr(orderPort)
-	k8sDataAddr := address.NewK8sDataAddr(basePort)
+	k8sDataAddr := address.NewK8sDataAddr(port)
 	// listen to the port
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
@@ -64,4 +69,20 @@ func StartK8s() {
 	for {
 		time.Sleep(time.Second)
 	}
+}
+
+func parseDataPodName(podName string) (string, int, int) {
+	splitPodName := strings.Split(podName, "-")
+	shardGroup := strings.Join(splitPodName[:len(splitPodName)-1], "-")
+	shardID, err := strconv.Atoi(splitPodName[len(splitPodName)-2])
+	if err != nil {
+		return "", -1, -1
+	}
+	replicaID, err := strconv.Atoi(splitPodName[len(splitPodName)-1])
+	if err != nil {
+		replicaID = -1
+		shardGroup = ""
+		shardID = -1
+	}
+	return shardGroup, replicaID, shardID
 }

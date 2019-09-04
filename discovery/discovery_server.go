@@ -67,7 +67,7 @@ func (s *DiscoveryServer) UpdateOrderAddr(addr string) error {
 		s.orderConn.Close()
 		s.orderConn = nil
 	}
-	opts := []grpc.DialOption{grpc.WithInsecure()}
+	opts := []grpc.DialOption{grpc.WithInsecure(), grpc.WithBlock()}
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
 		return fmt.Errorf("Dial peer %v failed: %v", addr, err)
