@@ -44,7 +44,7 @@ type Client struct {
 	dataAddr           address.DataAddr
 	dataConn           map[int32]*grpc.ClientConn
 	dataConnMu         sync.Mutex
-	dataAppendClient   map[int32]*datapb.Data_AppendClient
+	dataAppendClient   map[int32]datapb.Data_AppendClient
 	dataAppendClientMu sync.Mutex
 }
 
@@ -64,7 +64,7 @@ func NewClient(dataAddr address.DataAddr, discAddr address.DiscAddr, numReplica 
 	c.ackC = make(chan *datapb.Ack, 4096)
 	c.subC = make(chan *datapb.Record, 4096)
 	c.dataConn = make(map[int32]*grpc.ClientConn)
-	c.dataAppendClient = make(map[int32]*datapb.Data_AppendClient)
+	c.dataAppendClient = make(map[int32]datapb.Data_AppendClient)
 	c.view = view.NewView()
 	err := c.UpdateDiscovery()
 	if err != nil {
@@ -148,7 +148,7 @@ func (c *Client) connDataServer(shard, replica int32) (*grpc.ClientConn, error) 
 	return conn, nil
 }
 
-func (c *Client) getDataAppendClient(shard, replica int32) (*datapb.Data_AppendClient, error) {
+func (c *Client) getDataAppendClient(shard, replica int32) (datapb.Data_AppendClient, error) {
 	globalReplicaID := shard*c.numReplica + replica
 	c.dataAppendClientMu.Lock()
 	defer c.dataAppendClientMu.Unlock()
@@ -158,7 +158,7 @@ func (c *Client) getDataAppendClient(shard, replica int32) (*datapb.Data_AppendC
 	return c.buildDataAppendClient(shard, replica)
 }
 
-func (c *Client) buildDataAppendClient(shard, replica int32) (*datapb.Data_AppendClient, error) {
+func (c *Client) buildDataAppendClient(shard, replica int32) (datapb.Data_AppendClient, error) {
 	globalReplicaID := shard*c.numReplica + replica
 	conn, err := c.getDataServerConn(shard, replica)
 	if err != nil {
@@ -169,8 +169,8 @@ func (c *Client) buildDataAppendClient(shard, replica int32) (*datapb.Data_Appen
 	if err != nil {
 		return nil, fmt.Errorf("Build data append client of shard %v replica %v failed: %v", shard, replica, err)
 	}
-	c.dataAppendClient[globalReplicaID] = &dataAppendClient
-	return &dataAppendClient, nil
+	c.dataAppendClient[globalReplicaID] = dataAppendClient
+	return dataAppendClient, nil
 }
 
 func (c *Client) getDataServerConn(shard, replica int32) (*grpc.ClientConn, error) {
@@ -213,7 +213,7 @@ func (c *Client) processAppend() {
 			log.Errorf("%v", err)
 			continue
 		}
-		err = (*client).Send(r)
+		err = client.Send(r)
 		if err != nil {
 			log.Errorf("%v", err)
 		}

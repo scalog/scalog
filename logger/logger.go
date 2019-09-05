@@ -5,11 +5,7 @@ import (
 	"os"
 )
 
-var logger *log.Logger
-
-func init() {
-	logger = log.New(os.Stdout, "[scalog] ", log.Ldate|log.Lmicroseconds)
-}
+var logger = log.New(os.Stdout, "[scalog] ", log.Ldate|log.Lmicroseconds)
 
 func Printf(format string, v ...interface{}) {
 	logger.Printf(format, v...)

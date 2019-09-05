@@ -48,8 +48,7 @@ type DataServer struct {
 	subC           map[int32]chan *datapb.Record
 	subCMu         sync.RWMutex
 
-	storage    *storage.Storage
-	kubeClient *kubernetes.Clientset
+	storage *storage.Storage
 
 	wait   map[int64]chan *datapb.Ack
 	waitMu sync.RWMutex
@@ -139,7 +138,7 @@ func (s *DataServer) UpdateOrderAddr(addr string) error {
 
 func (s *DataServer) UpdateOrder() error {
 	addr := s.orderAddr.Get()
-	if len(addr) == 0 {
+	if addr == "" {
 		return fmt.Errorf("Wrong order-addr format: %v", addr)
 	}
 	return s.UpdateOrderAddr(addr)
@@ -153,18 +152,19 @@ func (s *DataServer) ConnPeers() error {
 	s.peerConns = make([]*grpc.ClientConn, s.numReplica)
 	s.peerClients = make([]*datapb.Data_ReplicateClient, s.numReplica)
 	for i := int32(0); i < s.numReplica; i++ {
-		if i != s.replicaID {
-			err := s.connectToPeer(i)
-			if err != nil {
-				log.Errorf("%v", err)
-				return err
-			}
-			done := make(chan interface{})
-			sendC := s.replicateSendC[i]
-			client := s.peerClients[i]
-			s.peerDoneC[i] = done
-			go s.replicateRecords(done, sendC, client)
+		if i == s.replicaID {
+			continue
 		}
+		err := s.connectToPeer(i)
+		if err != nil {
+			log.Errorf("%v", err)
+			return err
+		}
+		done := make(chan interface{})
+		sendC := s.replicateSendC[i]
+		client := s.peerClients[i]
+		s.peerDoneC[i] = done
+		go s.replicateRecords(done, sendC, client)
 	}
 	return nil
 }
@@ -341,7 +341,7 @@ func (s *DataServer) processCommittedEntry() {
 						diff = lsn - l
 					}
 					if diff > 0 {
-						startGSN += int64(diff)
+						startGSN += diff
 					}
 				}
 			}
@@ -389,7 +389,7 @@ func (s *DataServer) processCommittedEntry() {
 			// replace previous committed cut
 			s.prevCommittedCut = entry.CommittedCut
 		}
-		if entry.FinalizeShards != nil {
+		if entry.FinalizeShards != nil { //nolint
 			// TODO
 		}
 	}

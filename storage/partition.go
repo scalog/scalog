@@ -9,15 +9,15 @@ type Partition struct {
 	nextLSN       int64
 	segments      []*Segment
 	activeSegment *Segment
-	activeBaseLSN int64
+	activebaseLSN int64
 	segLen        int32
 }
 
 func NewPartition(path string, segLen int32) (*Partition, error) {
 	var err error
-	p := &Partition{path: path, nextLSN: 0, activeBaseLSN: 0}
+	p := &Partition{path: path, nextLSN: 0, activebaseLSN: 0}
 	p.segments = make([]*Segment, 0)
-	p.activeSegment, err = NewSegment(path, p.activeBaseLSN)
+	p.activeSegment, err = NewSegment(path, p.activebaseLSN)
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +43,11 @@ func (p *Partition) Read(gsn int64) (string, error) {
 }
 
 func (p *Partition) ReadGSN(gsn int64) (string, error) {
-	if gsn >= p.activeSegment.BaseGSN {
+	if gsn >= p.activeSegment.baseGSN {
 		return p.activeSegment.ReadGSN(gsn)
 	}
 	f := func(s *Segment) int64 {
-		return s.BaseGSN
+		return s.baseGSN
 	}
 	s := binarySearch(p.segments, f, gsn)
 	if s == nil {
@@ -57,11 +57,11 @@ func (p *Partition) ReadGSN(gsn int64) (string, error) {
 }
 
 func (p *Partition) ReadLSN(lsn int64) (string, error) {
-	if lsn >= p.activeSegment.BaseLSN {
+	if lsn >= p.activeSegment.baseLSN {
 		return p.activeSegment.ReadLSN(lsn)
 	}
 	f := func(s *Segment) int64 {
-		return s.BaseLSN
+		return s.baseLSN
 	}
 	s := binarySearch(p.segments, f, lsn)
 	return s.ReadLSN(lsn)
@@ -83,12 +83,12 @@ func binarySearch(segs []*Segment, get func(*Segment) int64, target int64) *Segm
 
 func (p *Partition) CreateSegment() error {
 	var err error
-	p.activeBaseLSN += int64(p.segLen)
+	p.activebaseLSN += int64(p.segLen)
 	p.segments = append(p.segments, p.activeSegment)
-	p.activeSegment, err = NewSegment(p.path, p.activeBaseLSN)
+	p.activeSegment, err = NewSegment(p.path, p.activebaseLSN)
 	return err
 }
 
 func (p *Partition) Assign(lsn int64, length int32, gsn int64) error {
-	return p.activeSegment.Assign(int32(lsn-p.activeBaseLSN), length, gsn)
+	return p.activeSegment.Assign(int32(lsn-p.activebaseLSN), length, gsn)
 }
