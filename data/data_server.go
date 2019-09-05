@@ -13,7 +13,6 @@ import (
 	"github.com/scalog/scalog/pkg/address"
 	"github.com/scalog/scalog/storage"
 	"google.golang.org/grpc"
-	"k8s.io/client-go/kubernetes"
 )
 
 type DataServer struct {
