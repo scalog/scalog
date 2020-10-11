@@ -1,5 +1,5 @@
 # scalog
-reimplement scalog from scratch
+reimplementing scalog from scratch
 
 ## Build Scalog
 
